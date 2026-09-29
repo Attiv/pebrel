@@ -26,9 +26,19 @@ use nebula_terminal::vte::ansi::{Color, CursorShape, NamedColor};
 use super::colors::Palette;
 use super::view::TerminalView;
 
+#[path = "element/codex_emphasis.rs"]
+mod codex_emphasis;
+use codex_emphasis::{
+    CodexSummaryKind, classify_codex_summary_rows, paint_codex_markers, summary_foreground,
+};
+
 #[cfg(test)]
 #[path = "element/color_tests.rs"]
 mod color_tests;
+
+#[cfg(test)]
+#[path = "element/codex_emphasis_tests.rs"]
+mod codex_emphasis_tests;
 
 pub struct TerminalElement {
     view: gpui::Entity<TerminalView>,
@@ -310,6 +320,34 @@ impl Element for TerminalElement {
         });
         let overrides = snap.color_overrides;
         self.resolve_app_colors(&mut snap, &mut dashed, &theme, &overrides, cx);
+        let is_codex =
+            self.view.read(cx).runtime_agent().is_some_and(|agent| agent.kind == "codex");
+        let codex_summary_rows = classify_codex_summary_rows(&snap, is_codex);
+        let codex_success = rgb_from_rgba(theme.ansi[2]);
+        let codex_failure = rgb_from_rgba(theme.ansi[1]);
+        let codex_normal = rgb_from_rgba(theme.foreground);
+        let codex_background = rgb_from_rgba(theme.background);
+        let codex_success_fg = summary_foreground(
+            CodexSummaryKind::Success,
+            codex_success,
+            codex_failure,
+            codex_normal,
+            codex_background,
+            codex_background,
+        );
+        let codex_failure_fg = summary_foreground(
+            CodexSummaryKind::Failure,
+            codex_success,
+            codex_failure,
+            codex_normal,
+            codex_background,
+            codex_background,
+        );
+        let codex_color = |kind| match kind {
+            CodexSummaryKind::Success => codex_success_fg,
+            CodexSummaryKind::Failure => codex_failure_fg,
+            CodexSummaryKind::Neutral => codex_normal,
+        };
         let (theme_anchor, theme_is_light) = themed_anchor(&theme, cx);
         let host_cursor_follows_theme = is_default_host_cursor(&theme);
         let app_cursor = snap.cursor.as_ref().filter(|cursor| {
@@ -404,6 +442,14 @@ impl Element for TerminalElement {
             }
             paint(run.start, run.end, run.color);
         }
+        paint_codex_markers(
+            &codex_summary_rows,
+            &snap,
+            window,
+            |row| cell_rect(row as usize, 0, 1),
+            codex_color,
+            |row| math_frame.covers(row as usize, 0),
+        );
         let selection_fill = if is_default_selection(&theme) {
             let alpha = if theme_is_light {
                 crate::display::ui::tokens::terminal_feedback::SELECTION_ALPHA_LIGHT
@@ -599,6 +645,7 @@ impl Element for TerminalElement {
         // 连字仅合并同一行内同样式的窄 ASCII 格，光标、选区和公式
         // 投影边界仍逐格裁定。字形簇的原点始终由固定网格决定。
         for seg in &snap.segments {
+            let summary = codex_summary_rows.get(seg.row as usize).copied().flatten();
             let mut cells = seg.cells.as_slice();
             while let Some(cell) = cells.first() {
                 let remaining = cells;
@@ -613,10 +660,13 @@ impl Element for TerminalElement {
                 else {
                     continue;
                 };
+                let emphasized = summary.is_some_and(|row| row.emphasizes_cell(cell));
                 let fg: Hsla = if cursor_inverts(seg.row, cell.col) {
                     theme.cursor_text.unwrap_or(theme.background).into()
                 } else if let Some(foreground) = selected_foreground(seg.row, cell.col) {
                     foreground.into()
+                } else if emphasized {
+                    rgba_rgb(codex_color(summary.unwrap().kind), 1.0).into()
                 } else {
                     theme.resolve(cell.fg, &overrides, cell.bold).into()
                 };
@@ -631,7 +681,7 @@ impl Element for TerminalElement {
                     .then(|| gpui::StrikethroughStyle { thickness: px(1.0), color: Some(fg) });
                 let run = TextRun {
                     len: cell.text.len(),
-                    font: pick_font(cell.bold, cell.italic, seg.wide),
+                    font: pick_font(cell.bold || emphasized, cell.italic, seg.wide),
                     color: fg,
                     background_color: None,
                     underline,
@@ -653,6 +703,7 @@ impl Element for TerminalElement {
                                 == cursor_inverts(seg.row, cell.col)
                             && selected_foreground(seg.row, next.col)
                                 == selected_foreground(seg.row, cell.col)
+                            && summary.is_some_and(|row| row.emphasizes_cell(next)) == emphasized
                             && !dashed.contains_key(&(seg.row, next.col))
                     })
                 } else {
