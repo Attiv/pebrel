@@ -1007,6 +1007,19 @@ mod tests {
     }
 
     #[test]
+    fn codex_shortcuts_footer_still_identifies_the_live_pane() {
+        // Captured from the 2026-09-29 Pebrel pane: recent Codex versions put
+        // shortcuts and warnings on a row below the model/effort footer.
+        let live = "• Ran cargo test\n\n› Ask Codex to do anything\n\n  GPT-6-Sol xhigh · ~/projects/pokemon · Context 52% left\n  ? for shortcuts       ⚠ 8 warnings · f2 to view";
+        assert_eq!(identify(live), Some(AgentKind::Codex));
+        assert_eq!(
+            identify(&format!("{live}\nuser@host:~$ ")),
+            None,
+            "a returned shell prompt must not keep Codex identity alive"
+        );
+    }
+
+    #[test]
     fn branded_screen_chrome_identifies_codex_without_a_visible_host_process() {
         let screen = "OpenAI Codex (v0.42.0)\n\n› Ask Codex to do anything";
         assert_eq!(identify(screen), Some(AgentKind::Codex));
