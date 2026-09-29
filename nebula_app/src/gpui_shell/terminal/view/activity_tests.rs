@@ -59,6 +59,21 @@ fn screen(view: &mut TerminalView, text: &str) {
 }
 
 #[gpui::test]
+fn codex_shortcuts_footer_recovers_identity_inside_a_nested_shell(cx: &mut TestAppContext) {
+    let (view, window, _) = open(cx);
+    view.update(window, |view, cx| {
+        view.running_program = Some("zsh".into());
+        screen(
+            view,
+            "• Ran cargo test\n\n› Ask Codex to do anything\n\n  GPT-6-Sol xhigh · ~/projects/pokemon\n  ? for shortcuts  ⚠ 8 warnings · f2 to view",
+        );
+        assert!(view.runtime_agent().is_none());
+        view.refresh_agent_screen_state(cx);
+        assert_eq!(view.runtime_agent().unwrap().kind, "codex");
+    });
+}
+
+#[gpui::test]
 fn hook_lifecycle_cannot_be_rewritten_by_screen_words_or_idle_samples(cx: &mut TestAppContext) {
     let (view, window, _) = open(cx);
     view.update(window, |view, cx| {
