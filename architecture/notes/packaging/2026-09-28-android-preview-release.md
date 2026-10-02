@@ -2,7 +2,8 @@
 
 ## Status
 
-Implemented in the release candidate; hosted Android build and device validation pending.
+Implemented and released in 2.0.0. Hosted build and x86_64 emulator validation passed;
+physical-phone acceptance remains separate.
 
 ## Context
 
@@ -67,8 +68,11 @@ the exact historical desktop-only asset sets.
 ## Validation
 
 Focused Python tests cover signer/package/version mismatches, missing or failed
-tests, wrong source/hash evidence and a missing or malformed APK. Hosted CI and
-physical-phone coverage are reported separately from these local contracts.
+tests, wrong source/hash evidence and a missing or malformed APK. The
+[Android release job](https://github.com/Kuddev/pebrel/actions/runs/36452556963/job/109035735360)
+passed 142 unit tests and 18 x86_64 emulator tests, then verified the Preview
+identity, signer, native payload and source-bound evidence. The downloaded public
+APK matches that evidence. Physical-phone coverage remains separate.
 
 ## Supersedes
 

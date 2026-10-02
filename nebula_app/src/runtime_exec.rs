@@ -212,7 +212,7 @@ fn host_cwd(reported: &str, fallback: Option<&Path>) -> Result<PathBuf, ApiError
     })
 }
 
-fn build_command(
+pub(crate) fn build_command(
     context: &PaneExecContext,
     reported_cwd: &str,
     argv: &[String],

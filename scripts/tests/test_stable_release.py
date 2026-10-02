@@ -76,8 +76,8 @@ def notes(checksum_placeholder: bool = True) -> str:
 
 class StableReleaseTests(unittest.TestCase):
     def test_stable_workflow_packages_without_repeating_native_tests(self) -> None:
-        # The Full native tests workflow already covers every PR, merge group
-        # and main push; the release run only packages and verifies the runtime
+        # The Full native tests workflow covers every main push and merge group;
+        # PRs select hosts by changed paths; the release run only packages and verifies the runtime
         # conformance evidence of each package, so its wall time is bounded by
         # the slowest build rather than by test scheduling.
         root = Path(__file__).resolve().parents[2]
@@ -87,7 +87,7 @@ class StableReleaseTests(unittest.TestCase):
         shared = (root / ".github/workflows/linux-lua.yml").read_text(encoding="utf-8")
         # Platform coverage comes from the event plan, not literal runner names
         # in YAML. Verify both the consumer wiring and the full caller matrices.
-        for output in ("native_matrix", "release_matrix"):
+        for output in ("native_matrix", "check_matrix"):
             self.assertIn(f"fromJSON(needs.lint.outputs.{output})", shared)
         self.assertIn("runs-on: ${{ matrix.os }}", shared)
         for event in ("push", "merge_group", "workflow_call", "workflow_dispatch"):

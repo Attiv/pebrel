@@ -34,6 +34,9 @@ class DesktopRuntimeClient(
     private var snapshotsActive = false
     private var liveInput: Boolean? = null
     private val closed = AtomicBoolean()
+    @Volatile private var lastReceivedAt = 0L
+    val recentlyActive: Boolean get() = !closed.get() && lastReceivedAt != 0L &&
+        android.os.SystemClock.elapsedRealtime() - lastReceivedAt < 10_000
     @Volatile private var screenUnsupported = false
     @Volatile private var screenDelta = false
     @Volatile private var screenStream = false
@@ -77,6 +80,7 @@ class DesktopRuntimeClient(
         try {
             transport.open(allowInput, { message ->
                 if (!closed.get()) {
+                    lastReceivedAt = android.os.SystemClock.elapsedRealtime()
                     when {
                         message.optString("type") == "mobile.ready" -> ready.complete(message)
                         message.optString("type") == "mobile.approval" -> {

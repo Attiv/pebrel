@@ -1,4 +1,8 @@
 {
+  "tray": {
+    "show": "Show Pebrel",
+    "quit": "Quit"
+  },
   "notification": {
     "bell": "Terminal bell",
     "turn_failed_reason": "Request failed: {error}",
@@ -13,6 +17,26 @@
     "en_us": "English"
   },
   "settings": {
+    "completion": {
+      "mode": "Completion mode",
+      "cycle": "Cycle completion mode",
+      "inline": "Inline",
+      "popup": "List",
+      "hybrid": "Hybrid",
+      "description": "Choose how suggestions appear and which key accepts them.",
+      "details": "Inline: Tab accepts the suggestion after the cursor. List: candidates appear as you type; use arrow keys to select and Tab to insert. Hybrid: Right arrow accepts the inline suggestion; Tab opens the list, arrow keys select and Enter inserts. Escape closes the list. Accepting a suggestion never runs the command. Changes apply to open terminals."
+    },
+    "environment": {
+      "refresh": "Refresh system environment for new terminals",
+      "refresh_description": "Read current Windows environment settings when opening a terminal. Turn off to inherit the environment used to launch Pebrel, including temporary PATH entries. Open terminals are unchanged."
+    },
+    "cursor_motion": {
+      "title": "Smooth cursor",
+      "description": "Animate terminal cursor movement; large jumps remain instant.",
+      "off": "Off",
+      "smooth": "Smooth (90 ms)",
+      "save_failed": "Could not save cursor motion: {error}"
+    },
     "scrolling": {
       "history": "Scrollback lines",
       "history_description": "History lines retained per terminal. Applies to new terminals only.",
@@ -57,6 +81,10 @@
       },
       "address": {
         "label": "Proxy address"
+      },
+      "terminal": {
+        "label": "System proxy",
+        "description": "When enabled, new terminals use the current Windows system proxy. A custom proxy address is applied to new terminals on its own, without this switch."
       },
       "status": {
         "idle": "Test whether the current settings can access the network",
@@ -234,6 +262,7 @@
     "saved": "Saved",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "confirmation_dialog_shortcuts": "Confirmation dialogs: confirm / cancel",
     "close": "Close",
     "open": "Open",
     "add": "Add",
@@ -721,7 +750,7 @@
   },
   "theme_editor": {
     "title": "Customize theme",
-    "description": "Start with a theme and make it your own.",
+    "description": "Adjust colors and typography; preview the result on the right.",
     "template": "Template",
     "name": "Theme name",
     "background": "Background",
@@ -739,7 +768,9 @@
     "apply": "Save and apply",
     "import": "Import",
     "export": "Export",
-    "common": "Common settings",
+    "common": "Common colors",
+    "typography": "Typography and display",
+    "contrast": "Text/background contrast (opaque)",
     "preview_terminal": "Terminal",
     "preview_interface": "Interface",
     "preview_ansi": "ANSI colors",

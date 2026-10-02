@@ -44,6 +44,43 @@ fn fixture_addresses() -> Vec<connection::LanAddress> {
 }
 
 #[gpui::test]
+fn refreshing_interfaces_never_selects_a_replacement_for_saved_tailscale(
+    cx: &mut gpui::TestAppContext,
+) {
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut owner = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let pane = cx.new(|cx| SettingsPane::new(window, cx));
+        pane.update(cx, |pane, cx| {
+            pane.mobile.initialized = true;
+            let mut snapshot = fixture(true, true);
+            snapshot.preferences.address = Some("100.64.0.8".parse().unwrap());
+            pane.mobile.display_snapshot(snapshot);
+            pane.mobile_set_addresses(fixture_addresses(), window, cx);
+        });
+        owner = Some(pane.clone());
+        gpui_component::Root::new(pane, window, cx)
+    });
+    let pane = owner.unwrap();
+    cx.update(|window, cx| {
+        pane.update(cx, |pane, cx| {
+            let selected = Some("100.64.0.8".parse().unwrap());
+            assert_eq!(pane.mobile_selected_address(cx), selected);
+            for available in [vec![fixture_addresses().remove(0)], Vec::new()] {
+                pane.mobile_set_addresses(available, window, cx);
+                assert_eq!(pane.mobile_selected_address(cx), None);
+                assert_eq!(pane.mobile.preferences().address, selected);
+            }
+            pane.mobile_set_addresses(fixture_addresses(), window, cx);
+            assert_eq!(pane.mobile_selected_address(cx), selected);
+        });
+    });
+}
+
+#[gpui::test]
 fn mobile_three_states_and_manual_copy_use_the_rendered_controls(cx: &mut gpui::TestAppContext) {
     cx.update(|cx| {
         gpui_component::init(cx);

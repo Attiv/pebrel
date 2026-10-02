@@ -5,7 +5,7 @@ use gpui::{Bounds, Pixels, Window, fill, point, px, size};
 use nebula_terminal::render::{RenderSnapshot, SnapCell};
 use nebula_terminal::vte::ansi::{Color, NamedColor};
 
-use super::rgba_rgb;
+use super::{Palette, rgb_from_rgba, rgba_rgb};
 use crate::display::color::Rgb;
 
 const PREFIX_COLS: usize = 32;
@@ -15,6 +15,48 @@ pub(super) enum CodexSummaryKind {
     Success,
     Failure,
     Neutral,
+}
+
+pub(super) struct CodexSummaryPalette {
+    success: Rgb,
+    failure: Rgb,
+    normal: Rgb,
+}
+
+impl CodexSummaryPalette {
+    pub fn new(theme: &Palette) -> Self {
+        let success = rgb_from_rgba(theme.ansi[2]);
+        let failure = rgb_from_rgba(theme.ansi[1]);
+        let normal = rgb_from_rgba(theme.foreground);
+        let background = rgb_from_rgba(theme.background);
+        Self {
+            success: summary_foreground(
+                CodexSummaryKind::Success,
+                success,
+                failure,
+                normal,
+                background,
+                background,
+            ),
+            failure: summary_foreground(
+                CodexSummaryKind::Failure,
+                success,
+                failure,
+                normal,
+                background,
+                background,
+            ),
+            normal,
+        }
+    }
+
+    pub fn color(&self, kind: CodexSummaryKind) -> Rgb {
+        match kind {
+            CodexSummaryKind::Success => self.success,
+            CodexSummaryKind::Failure => self.failure,
+            CodexSummaryKind::Neutral => self.normal,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

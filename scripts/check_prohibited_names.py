@@ -112,6 +112,23 @@ REMOTE_SESSION_PATTERNS = tuple(re.compile(pattern) for pattern in (
     r"\b(?:exec )?tmux (?:new-session -A -s|kill-session -t) '[^'\n]+'",
     r"\bexec herdr(?=[\"'\s])",
     r"\bherdr session (?:attach|stop) '[^'\n]+'",
+    r"\bcommand -v (?:tmux|herdr)(?=\s+>)",
+    r"\bGet-Command herdr(?= -ErrorAction\b)",
+    r"\btmux (?:list-sessions|list-windows)(?= -[a-zA-Z]\b)",
+    r"\btmux (?:select-window -t|display-message -p -t|attach-session -t)(?= )",
+    r"\bherdr session list --json\b",
+    r"\bherdr session attach(?= \$\{psQuote\()",
+    r"\bherdr --session(?= \$\{(?:quote|psQuote)\()",
+))
+# 发现器的类型标签是线协议的一部分；只允许明确的构造/分派位置，
+# 不放行任意字符串字面量，更不能吞掉同行的说明、链接或比较文案。
+REMOTE_DISCOVERY_TAG_PATTERNS = tuple(re.compile(pattern) for pattern in (
+    r'\bdata\["(?:tmux|herdr)"\]',
+    r'\bRemoteSession\("(?:tmux|herdr)"(?=,)',
+    r'\bsession\.kind (?:==|!=) "(?:tmux|herdr)"',
+    r'^\s*"(?:tmux|herdr)"(?= ->)',
+    r'\bwarnings \+= "herdr"',
+    r"\[char\]30 \+ 'herdr'(?= \+ \[char\]10)",
 ))
 
 
@@ -136,6 +153,9 @@ def mobile_reference_remainder(path: str, text: str) -> str:
     if path.startswith("mobile/android/app/src/") and path.endswith(".kt"):
         for pattern in REMOTE_SESSION_PATTERNS:
             text = pattern.sub("", text)
+        if path.endswith("/connection/RemoteSessions.kt"):
+            for pattern in REMOTE_DISCOVERY_TAG_PATTERNS:
+                text = pattern.sub("", text)
         if path.endswith("/connection/SshSessionMode.kt"):
             text = text.replace('TMUX("tmux")', "").replace('HERDR("herdr")', "")
     return text

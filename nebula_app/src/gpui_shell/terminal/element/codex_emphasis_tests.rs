@@ -6,8 +6,11 @@ use nebula_terminal::term::test::TermSize;
 use nebula_terminal::term::{Config, Term};
 use nebula_terminal::vte::ansi::{self, Color, NamedColor};
 
-use super::codex_emphasis::{marker_bounds, should_paint_codex_marker, summary_foreground};
-use super::{CodexSummaryKind, classify_codex_summary_rows};
+use super::classify_codex_summary_rows;
+use super::codex_emphasis::{
+    CodexSummaryKind, CodexSummaryPalette, marker_bounds, should_paint_codex_marker,
+    summary_foreground,
+};
 use crate::display::color::Rgb;
 use gpui::{Bounds, point, px, size};
 
@@ -160,4 +163,27 @@ fn status_accents_remain_readable_on_light_and_dark_terminal_surfaces() {
         ),
         foreground,
     );
+}
+
+#[test]
+fn summary_palette_preserves_theme_colors_and_contrast_adjustment() {
+    let dark = super::Palette::default();
+    let mut light = dark.clone();
+    light.foreground = gpui::rgb(0x21252b);
+    light.background = gpui::rgb(0xf8f9fb);
+    for theme in [dark, light] {
+        let palette = CodexSummaryPalette::new(&theme);
+        let success = super::rgb_from_rgba(theme.ansi[2]);
+        let failure = super::rgb_from_rgba(theme.ansi[1]);
+        let normal = super::rgb_from_rgba(theme.foreground);
+        let background = super::rgb_from_rgba(theme.background);
+        for kind in
+            [CodexSummaryKind::Success, CodexSummaryKind::Failure, CodexSummaryKind::Neutral]
+        {
+            assert_eq!(
+                palette.color(kind),
+                summary_foreground(kind, success, failure, normal, background, background),
+            );
+        }
+    }
 }

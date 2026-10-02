@@ -254,7 +254,8 @@ impl SettingsPane {
                             .child(drawer),
                     ),
             )
-            .with_priority(8)
+            // 组件库的下拉菜单在优先级 1 绘制；抽屉须先画，避免菜单被背景盖住。
+            .with_priority(0)
             .into_any_element(),
         )
     }

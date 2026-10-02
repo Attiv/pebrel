@@ -15,9 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -52,9 +51,9 @@ internal fun DesktopOutputSurface(
     loading: Boolean = false,
     connected: Boolean = true,
     wrapLines: Boolean = true,
+    pasteTarget: TerminalInputTarget? = inputTarget,
 ) {
     val legacyText = frame == null && text.isNotEmpty()
-    var copiedText by remember(identity) { mutableStateOf<String?>(null) }
     var lastKeyboardRequest by remember(identity) { mutableIntStateOf(keyboardRequest) }
     var inputView by remember(identity) { mutableStateOf<TerminalSnapshotView?>(null) }
     val zoomFeedback = rememberTerminalZoomFeedback(identity)
@@ -64,6 +63,7 @@ internal fun DesktopOutputSurface(
             AndroidView(modifier = Modifier.fillMaxSize(), factory = { context -> TerminalSnapshotView(context) },
                 onRelease = { view ->
                     view.inputTarget = null
+                    view.pasteTarget = null
                     view.onZoomChanged = null
                     if (inputView === view) inputView = null
                 }, update = { view ->
@@ -77,8 +77,8 @@ internal fun DesktopOutputSurface(
                 view.contentDescription = frame?.text().orEmpty()
                 view.importantForAccessibility = if (legacyText) View.IMPORTANT_FOR_ACCESSIBILITY_NO
                     else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-                view.onCopyRequested = { copiedText = it }
                 view.inputTarget = inputTarget
+                view.pasteTarget = pasteTarget
                 if (lastKeyboardRequest != keyboardRequest) {
                     lastKeyboardRequest = keyboardRequest
                     view.post { if (view.isAttachedToWindow) view.showKeyboard() }
@@ -94,12 +94,6 @@ internal fun DesktopOutputSurface(
                 Modifier.align(Alignment.Center).padding(16.dp))
         }
         TerminalZoomIndicator(zoomFeedback)
-    }
-    copiedText?.let { content ->
-        AlertDialog(onDismissRequest = { copiedText = null },
-            title = { Text(stringResource(R.string.desktop_snapshot_text)) },
-            text = { SelectionContainer { Text(content, maxLines = 12) } },
-            confirmButton = { TextButton({ copiedText = null }) { Text(stringResource(R.string.close)) } })
     }
 }
 

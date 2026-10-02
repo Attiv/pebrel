@@ -33,7 +33,7 @@ use std::time::Duration;
 
 use crate::gpui_shell::config::{DEFAULT_CURSOR_BLINK, effective_cursor_blink};
 use crate::gpui_shell::prelude::*;
-use crate::gpui_shell::widgets::NebulaButton;
+use crate::gpui_shell::widgets::{NebulaButton, settings_control_height};
 
 mod about;
 mod agents;
@@ -44,6 +44,7 @@ mod appearance_picker;
 #[path = "background_color.rs"]
 mod background_color;
 mod backup;
+mod cursor_motion;
 mod design;
 mod font_picker;
 mod providers;
@@ -159,6 +160,7 @@ pub struct SettingsPane {
     provider_status: Option<ProviderStatus>,
     provider_test_seq: u64,
     provider_test_running: bool,
+    provider_key_task: Option<Task<()>>,
     provider_codex_confirm: Option<String>,
     /// SSH 主机列表（共享三键 + merge 权威）；操作后整体重载防漂移。
     /// SSH 区的行为实现拆在 `ssh_settings.rs`（同类型第二个 impl 块）。
@@ -379,7 +381,10 @@ impl SettingsPane {
             cx.notify();
             return;
         }
-        if matches!(key, "ai_toasts" | "focus_follows_mouse" | "dim_inactive_panes") {
+        if matches!(
+            key,
+            "ai_toasts" | "focus_follows_mouse" | "dim_inactive_panes" | "refresh_environment"
+        ) {
             if let Err(error) = self.try_persist(&[(key, (value as u8).to_string())], cx) {
                 let language = crate::gpui_shell::config::ui_language(cx);
                 super::toast::toast(
@@ -682,7 +687,7 @@ impl SettingsPane {
                 .debug_selector(move || format!("settings-select-{key}"))
                 .w(px(SETTINGS_SELECT_WIDTH))
                 .text_color(cx.theme().link)
-                .children(select.map(|state| Select::new(&state)))
+                .children(select.map(|state| Select::new(&state).h(settings_control_height(cx))))
                 .into_any_element()
         });
         self.maybe_marked(key, label, desc, control, cx)
@@ -697,7 +702,7 @@ impl SettingsPane {
                 .w(px(SETTINGS_SELECT_WIDTH))
                 .font_family(cx.theme().mono_font_family.clone())
                 .text_color(cx.theme().link)
-                .child(Select::new(&self.shell_select)),
+                .child(Select::new(&self.shell_select).h(settings_control_height(cx))),
             cx,
         )
     }
@@ -741,11 +746,13 @@ impl SettingsPane {
             "multiline_paste_confirm" => flag!(multiline_paste_confirm),
             "tab_close_visible" => flag!(tab_close_visible),
             "terminal_proxy" => flag!(terminal_proxy),
+            "refresh_environment" => flag!(refresh_environment),
             "powerline" => flag!(powerline),
             "ghost" => flag!(ghost),
             "ai_toasts" => flag!(ai_toasts),
             "ctrl_wheel_font_zoom" => flag!(ctrl_wheel_font_zoom),
             "notification_duration" => pick!(notification_duration),
+            "cursor_motion" => pick!(cursor_motion),
             "cjk_bold_regular" => flag!(cjk_bold_regular),
             "fetch" => flag!(fetch),
             "keep_session" => flag!(keep_session),
@@ -1091,7 +1098,19 @@ impl SettingsPane {
         let terminal = self
             .group(language.pick("启动", "Startup"), cx)
             .child(self.shell_select_row(cx))
-            .child(self.startup_directory_row(cx));
+            .child(self.startup_directory_row(cx))
+            .when(
+                crate::platform::Platform::current() == crate::platform::Platform::Windows,
+                |group| {
+                    group.child(self.switch_row(
+                        "refresh_environment",
+                        language.text(crate::i18n::Message::SettingsEnvironmentRefresh),
+                        language.text(crate::i18n::Message::SettingsEnvironmentRefreshDescription),
+                        self.runtime.refresh_environment,
+                        cx,
+                    ))
+                },
+            );
         let alerts = self
             .group(language.pick("提醒", "Alerts"), cx)
             .child(self.switch_row(
@@ -1123,14 +1142,8 @@ impl SettingsPane {
                 cx,
             ))
             .child(self.select_row(
-                "accept",
-                language.pick("补全接受键", "Completion accept key"),
-                help("accept", language),
-                cx,
-            ))
-            .child(self.select_row(
                 "completion_style",
-                language.pick("补全样式", "Completion style"),
+                language.text(crate::i18n::Message::SettingsCompletionMode),
                 help("completion_style", language),
                 cx,
             ));

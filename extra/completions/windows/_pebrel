@@ -37,15 +37,16 @@ _pebrel() {
 '--help[Print help (see more with '\''--help'\'')]' \
 '-V[Print version]' \
 '--version[Print version]' \
+'::directory -- Open a directory supplied by the desktop file manager:_files -/' \
 ":: :_pebrel_commands" \
 "*::: :->Pebrel" \
 && ret=0
     case $state in
     (Pebrel)
-        words=($line[1] "${words[@]}")
+        words=($line[2] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:pebrel-command-$line[1]:"
-        case $line[1] in
+        curcontext="${curcontext%:*:*}:pebrel-command-$line[2]:"
+        case $line[2] in
             (ctl)
 _arguments "${_arguments_options[@]}" : \
 '--timeout-ms=[Maximum time to wait for a command response]:TIMEOUT_MS:_default' \

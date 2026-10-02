@@ -102,7 +102,9 @@ impl NebulaWorkspace {
                 },
                 // 更新通知由进程级 windowing dispatcher 选择 MRU 窗口；这个
                 // 旧的 workspace-local 分发器没有 Window，不能在此打开 Dialog。
-                GpuiShellEvent::UpdateAvailable(_) | GpuiShellEvent::SshPrompt(_) => {},
+                GpuiShellEvent::UpdateAvailable(_)
+                | GpuiShellEvent::SshPrompt(_)
+                | GpuiShellEvent::OpenDirectories(_) => {},
             }
         }
     }
@@ -115,7 +117,7 @@ impl NebulaWorkspace {
             RuntimeCommand::NewWindow { .. } => {
                 dispatch.respond(Err(ApiError::new(
                     "runtime_unavailable",
-                    "the GPUI runtime currently owns one workspace window; window.create is unavailable",
+                    "window.create is handled by the process-level window dispatcher",
                 )));
             },
             RuntimeCommand::Exec { window_id, pane_id, .. }
@@ -189,7 +191,7 @@ impl NebulaWorkspace {
             },
             RuntimeCommand::NewWindow { .. } => Err(ApiError::new(
                 "runtime_unavailable",
-                "window.create is not queued in the GPUI runtime",
+                "window.create is handled by the process-level window dispatcher",
             )),
             RuntimeCommand::CloseWindow { window_id } => {
                 self.runtime_window_requested(*window_id)?;
@@ -1024,9 +1026,8 @@ impl NebulaWorkspace {
             );
             return true;
         }
-        crate::gpui_shell::hide_native_window(window);
-        self.window_hidden = true;
-        true
+        self.window_hidden = crate::gpui_shell::hide_native_window(window);
+        self.window_hidden
     }
 
     fn has_live_terminal_panes(&self) -> bool {

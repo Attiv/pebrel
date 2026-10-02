@@ -136,6 +136,29 @@ class DesktopRecoveryTest {
         } finally { repository.foregroundChanged(false); repository.closeAll(); Dispatchers.resetMain() }
     }
 
+    @Test fun networkChangeReplacesAnApparentlyLiveSocketWithoutReplayingInput() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val links = mutableListOf<Link>()
+        val repository = SessionRepository(ApplicationProvider.getApplicationContext()) { Link().also(links::add) }
+        try {
+            repository.foregroundChanged(true)
+            val id = repository.connectRelay(RelayProfile("wss://example.com", "pc", "a".repeat(43), "PC"))
+            awaitState { repository.desktops.value.singleOrNull()?.status == "ready" }
+            val first = repository.desktops.value.single()
+            repository.setDraft("$id:1:2", "unsent")
+            repository.networkChanged()
+            advanceTimeBy(1); runCurrent()
+            awaitState { links.size == 2 && links.first().closed && repository.desktops.value.single().status == "ready" }
+            assertEquals(first.connectionGeneration + 1, repository.desktops.value.single().connectionGeneration)
+            assertEquals("unsent", repository.drafts.value["$id:1:2"])
+            assertTrue(links.all { link -> link.methods.none { it in setOf("pane.prompt", "pane.send_key") } })
+            repository.foregroundChanged(false)
+            repository.networkChanged()
+            advanceTimeBy(60_000); runCurrent()
+            assertEquals(2, links.size)
+        } finally { repository.foregroundChanged(false); repository.closeAll(); Dispatchers.resetMain() }
+    }
+
     @Test fun successfulComputerWithChangedCertificateRequiresUserAction() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val links = mutableListOf<Link>()
@@ -146,6 +169,7 @@ class DesktopRecoveryTest {
             awaitState { repository.desktops.value.singleOrNull()?.status == "ready" }
             links.first().lost(DesktopConnectionFailure(DesktopFailureKind.CERTIFICATE_CHANGED))
             awaitState { repository.desktops.value.single().status == "disconnected" }
+            repository.networkChanged()
             repository.foregroundChanged(false)
             repository.foregroundChanged(true)
             advanceTimeBy(60_000); runCurrent()

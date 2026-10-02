@@ -63,6 +63,13 @@ class DesktopTerminalInputTest {
         val control = DesktopTerminalInput.encodeKey(KeyEvent.KEYCODE_C, 2, "c")!!.single()
         assertEquals("c", control.params.getString("key"))
         assertTrue(control.params.getJSONObject("modifiers").getBoolean("control"))
+        for (shift in listOf(0, 1)) {
+            val tab = DesktopTerminalInput.encodeKey(KeyEvent.KEYCODE_TAB, shift, "")!!.single()
+            assertEquals("pane.send_key", tab.method)
+            assertEquals("tab", tab.params.getString("key"))
+            assertEquals(shift == 1, tab.params.getJSONObject("modifiers").getBoolean("shift"))
+            assertFalse(tab.params.getJSONObject("modifiers").getBoolean("control"))
+        }
         assertNull(DesktopTerminalInput.encodeText("\u001b]52;clipboard"))
         assertNull(DesktopTerminalInput.encodeText("\n".repeat(129)))
         assertNull(DesktopTerminalInput.encodeKey(KeyEvent.KEYCODE_A, 8, "a"))

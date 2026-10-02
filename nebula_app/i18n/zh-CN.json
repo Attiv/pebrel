@@ -1,4 +1,8 @@
 {
+  "tray": {
+    "show": "显示 Pebrel",
+    "quit": "退出"
+  },
   "notification": {
     "bell": "终端响铃",
     "turn_failed_reason": "请求失败：{error}",
@@ -13,6 +17,26 @@
     "en_us": "English"
   },
   "settings": {
+    "completion": {
+      "mode": "补齐模式",
+      "cycle": "切换补齐模式",
+      "inline": "行内补齐",
+      "popup": "列表补齐",
+      "hybrid": "混合补齐",
+      "description": "选择补齐模式，决定建议的显示方式和接受键。",
+      "details": "行内模式：Tab 接受光标后的建议。列表模式：随输入显示候选，方向键选择、Tab 填入。混合模式：右方向键接受行内建议；Tab 展开列表，方向键选择、Enter 填入。Esc 关闭列表。接受建议不会执行命令。切换后对已打开终端立即生效。"
+    },
+    "environment": {
+      "refresh": "新建终端时刷新系统环境变量",
+      "refresh_description": "打开终端时读取 Windows 当前环境设置。关闭后继承启动 Pebrel 时的环境，包括临时添加的 PATH。已打开的终端不受影响。"
+    },
+    "cursor_motion": {
+      "title": "平滑光标",
+      "description": "让终端光标平滑移动，大范围跳转仍立即定位。",
+      "off": "关闭",
+      "smooth": "平滑（90 ms）",
+      "save_failed": "无法保存光标动画设置：{error}"
+    },
     "scrolling": {
       "history": "回滚行数",
       "history_description": "每个窗格保留的历史行数。仅适用于新窗格。",
@@ -57,6 +81,10 @@
       },
       "address": {
         "label": "代理地址"
+      },
+      "terminal": {
+        "label": "系统代理",
+        "description": "打开后，新建终端使用当前 Windows 系统代理。填写自定义代理地址后，新开的终端会直接使用这个地址，不必再打开这项。"
       },
       "status": {
         "idle": "测试当前设置是否可以访问网络",
@@ -234,6 +262,7 @@
     "saved": "已保存",
     "cancel": "取消",
     "confirm": "确认",
+    "confirmation_dialog_shortcuts": "确认对话框：确定 / 取消",
     "close": "关闭",
     "open": "打开",
     "add": "添加",
@@ -721,7 +750,7 @@
   },
   "theme_editor": {
     "title": "自定义主题",
-    "description": "从现有主题开始，调整成自己的配色。",
+    "description": "调整颜色与字体，在右侧查看效果。",
     "template": "模板",
     "name": "主题名称",
     "background": "终端背景",
@@ -739,7 +768,9 @@
     "apply": "保存并应用",
     "import": "导入",
     "export": "导出",
-    "common": "常用设置",
+    "common": "常用颜色",
+    "typography": "字体与显示",
+    "contrast": "文字与背景对比度（不含透明度）",
     "preview_terminal": "终端",
     "preview_interface": "界面",
     "preview_ansi": "ANSI 色彩",

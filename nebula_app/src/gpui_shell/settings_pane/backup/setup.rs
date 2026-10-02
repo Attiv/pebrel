@@ -354,6 +354,7 @@ impl SettingsPane {
         let l = crate::gpui_shell::config::ui_language(cx);
         let owner = cx.entity().downgrade();
         Button::new("backup-provider-menu")
+            .debug_selector(|| "backup-provider-menu".into())
             .w_full()
             .dropdown_caret(true)
             .justify_between()

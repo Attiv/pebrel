@@ -142,6 +142,55 @@ fn backup_drawer_keeps_scope_off_dashboard_and_cancel_discards_draft(
 }
 
 #[gpui::test]
+fn issue_354_storage_menu_accepts_mouse_and_keyboard_inside_drawer(cx: &mut gpui::TestAppContext) {
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_reduce_motion(true);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut pane = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let view = cx.new(|cx| SettingsPane::new(window, cx));
+        view.update(cx, |p, cx| {
+            p.backup_remote = BackupRemoteConfig::default();
+            p.backup_remote.protocol = BackupProtocol::Folder;
+            p.backup_remote.selection = recommended();
+            p.active_section = 9;
+            p.initialize_backup(window, cx);
+            p.open_backup_sheet(BackupSheet::Storage, window, cx);
+        });
+        pane = Some(view.clone());
+        gpui_component::Root::new(view, window, cx)
+    });
+    let pane = pane.unwrap();
+    cx.simulate_resize(gpui::size(px(1100.0), px(1000.0)));
+    draw(cx);
+    click(cx, "backup-provider-menu");
+    let trigger = cx.debug_bounds("backup-provider-menu").unwrap();
+    // 实际点击下拉首行，避免只测回调而遗漏菜单被抽屉遮住的回归。
+    let first = gpui::point(trigger.left() + px(24.0), trigger.bottom() + px(18.0));
+    cx.simulate_mouse_move(first, None, gpui::Modifiers::default());
+    cx.simulate_mouse_down(first, MouseButton::Left, gpui::Modifiers::default());
+    cx.simulate_mouse_up(first, MouseButton::Left, gpui::Modifiers::default());
+    draw(cx);
+    assert_eq!(
+        pane.read_with(cx, |p, _| view::provider(&p.backup_ui.draft)),
+        Message::CloudNutstore
+    );
+    assert_eq!(pane.read_with(cx, |p, _| p.backup_remote.protocol), BackupProtocol::Folder);
+    click(cx, "backup-provider-menu");
+    cx.simulate_keystrokes("down down down enter");
+    draw(cx);
+    assert_eq!(pane.read_with(cx, |p, _| p.backup_ui.draft.protocol), BackupProtocol::S3);
+    click(cx, "backup-provider-menu");
+    cx.simulate_keystrokes("escape");
+    draw(cx);
+    assert!(cx.debug_bounds("backup-drawer").is_some());
+    click(cx, "backup-cancel");
+    assert_eq!(pane.read_with(cx, |p, _| p.backup_remote.protocol), BackupProtocol::Folder);
+}
+
+#[gpui::test]
 fn backup_form_columns_and_password_group_follow_prototype(cx: &mut gpui::TestAppContext) {
     check_backup_form_layout(cx, crate::display::UiLanguage::EnUs);
 }

@@ -177,7 +177,7 @@ impl SettingsPane {
                 && !this.mobile.operation
             {
                 let mut preferences = this.mobile.preferences();
-                preferences.address = this.mobile_selected_address(cx);
+                preferences.address = this.mobile_selected_address(cx).or(preferences.address);
                 if preferences.enabled && preferences.lan_enabled {
                     this.mobile_apply(preferences, None, false, window, cx);
                 }
@@ -403,7 +403,7 @@ impl SettingsPane {
             match mode {
                 Mode::Lan => {
                     preferences.lan_enabled = true;
-                    preferences.address = self.mobile_selected_address(cx);
+                    preferences.address = self.mobile_selected_address(cx).or(preferences.address);
                 },
                 Mode::Relay => preferences.relay_enabled = true,
             }
@@ -420,9 +420,8 @@ impl SettingsPane {
         cx: &mut Context<Self>,
     ) {
         let previous = self.mobile_selected_address(cx).or(self.mobile.preferences().address);
-        let selected = previous
-            .and_then(|ip| addresses.iter().position(|a| a.address == ip))
-            .or_else(|| (!addresses.is_empty()).then_some(0));
+        let selected = connection::available_address(previous, &addresses)
+            .and_then(|ip| addresses.iter().position(|a| a.address == ip));
         let labels = addresses
             .iter()
             .map(|a| SharedString::from(format!("{} · {}", a.name, a.address)))
