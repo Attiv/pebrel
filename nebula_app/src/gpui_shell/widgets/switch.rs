@@ -62,7 +62,7 @@ impl RenderOnce for NebulaSwitch {
                 epoch: 0,
             },
         );
-        let reduced = cx.reduce_motion() || self.disabled;
+        let reduced = !crate::gpui_shell::config::animations_enabled(cx) || self.disabled;
         let (from, position, epoch) = state.update(cx, |motion, _| {
             if motion.target != target {
                 motion.from = motion.position.get();

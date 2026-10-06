@@ -218,13 +218,15 @@ impl TabSession {
     }
 }
 
-/// Last normal (non-maximized, non-fullscreen) inner size in logical pixels.
-/// Logical units keep the perceived size stable when the next launch lands on
-/// a monitor with a different DPI scale factor. Write-only since v4: startup
-/// always sizes the window from the configured column/line count, so this
-/// record is diagnostic and forward-compat data, never replayed at boot.
+/// Last normal (non-maximized, non-fullscreen) bounds in logical pixels.
+/// Logical units keep the perceived geometry stable across DPI changes. Older
+/// v4 snapshots contain only size; missing coordinates fall back to centering.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WindowState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<i32>,
     pub width: u32,
     pub height: u32,
     #[serde(default)]
@@ -447,7 +449,13 @@ mod tests {
     #[test]
     fn window_state_round_trip_preserves_logical_size_and_maximize() {
         let mut session = Session::new(0, Vec::new());
-        session.window = Some(WindowState { width: 1280, height: 720, maximized: true });
+        session.window = Some(WindowState {
+            x: Some(120),
+            y: Some(80),
+            width: 1280,
+            height: 720,
+            maximized: true,
+        });
         let json = serde_json::to_string(&session).unwrap();
         let restored: Session = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.window, session.window);

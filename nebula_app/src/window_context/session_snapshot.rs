@@ -23,6 +23,8 @@ impl WindowContext {
             // Maximized: the live inner size is the whole monitor — remember
             // the last known NORMAL size instead.
             session::WindowState {
+                x: None,
+                y: None,
                 width: self.windowed_size.width,
                 height: self.windowed_size.height,
                 maximized,
@@ -34,7 +36,13 @@ impl WindowContext {
             // every relaunch.
             let logical: LogicalSize<u32> =
                 self.display.window.inner_size().to_logical(self.display.window.scale_factor);
-            session::WindowState { width: logical.width, height: logical.height, maximized }
+            session::WindowState {
+                x: None,
+                y: None,
+                width: logical.width,
+                height: logical.height,
+                maximized,
+            }
         });
         session
     }

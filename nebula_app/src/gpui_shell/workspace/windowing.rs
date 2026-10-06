@@ -423,27 +423,27 @@ fn workspace_window_options(
     focus: bool,
     role: WindowRole,
     sidebar_width: f32,
+    restored: Option<crate::session::WindowState>,
 ) -> WindowOptions {
     match role {
         WindowRole::Regular => {
-            let preferred = startup_geometry::preferred_size(cx, sidebar_width)
+            let preferred = restored
+                .map(|state| size(px(state.width as f32), px(state.height as f32)))
+                .or_else(|| startup_geometry::preferred_size(cx, sidebar_width))
                 .unwrap_or_else(|| size(px(1080.0), px(720.0)));
             let bounds = cx.primary_display().map_or_else(
                 || Bounds::centered(None, preferred, cx),
                 |display| {
-                    let visible = display.visible_bounds();
-                    let fitted = preferred.min(&visible.size);
-                    Bounds::new(
-                        point(
-                            visible.origin.x + (visible.size.width - fitted.width) / 2.0,
-                            visible.origin.y + (visible.size.height - fitted.height) / 2.0,
-                        ),
-                        fitted,
-                    )
+                    startup_geometry::restore_bounds(restored, display.visible_bounds(), preferred)
                 },
             );
+            let window_bounds = if restored.is_some_and(|state| state.maximized) {
+                WindowBounds::Maximized(bounds)
+            } else {
+                WindowBounds::Windowed(bounds)
+            };
             crate::platform::window_chrome::configure_options(WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_bounds: Some(window_bounds),
                 window_min_size: Some(size(px(760.0), px(540.0)).min(&bounds.size)),
                 titlebar: Some(TitleBar::title_bar_options()),
                 app_id: Some("pebrel".to_owned()),
@@ -510,7 +510,15 @@ fn open_workspace_window(
     let start_hidden = shell_events.is_some()
         && matches!(startup, WorkspaceStartup::RestoreOrDefault)
         && crate::platform::startup::start_hidden(&runtime);
-    let mut options = workspace_window_options(cx, focus, role, runtime.sidebar_width);
+    let restored_window_state = match &startup {
+        WorkspaceStartup::RestoreUpdate(session) => session.window,
+        WorkspaceStartup::RestoreOrDefault if runtime.restore_session => crate::session::load()
+            .filter(crate::session::should_restore)
+            .and_then(|session| session.window),
+        _ => None,
+    };
+    let mut options =
+        workspace_window_options(cx, focus, role, runtime.sidebar_width, restored_window_state);
     if start_hidden {
         options.show = false;
         options.focus = false;
@@ -527,7 +535,7 @@ fn open_workspace_window(
         #[cfg(windows)]
         crate::gpui_shell::set_native_window_icon(window);
         let workspace = cx.new(|cx| {
-            NebulaWorkspace::new(
+            NebulaWorkspace::new_with_window_state(
                 window,
                 ai_events,
                 shell_events,
@@ -535,6 +543,7 @@ fn open_workspace_window(
                 runtime_hub,
                 startup,
                 role,
+                restored_window_state,
                 cx,
             )
         });
@@ -1580,6 +1589,26 @@ pub(crate) fn close_empty_workspace_window(
 }
 
 impl NebulaWorkspace {
+    fn record_window_bounds(&mut self, window: &Window) {
+        if self.window_role != WindowRole::Regular || window.is_fullscreen() {
+            return;
+        }
+        if window.is_maximized() {
+            if let Some(state) = self.window_state.as_mut() {
+                state.maximized = true;
+            }
+            return;
+        }
+        let bounds = window.window_bounds().get_bounds();
+        self.window_state = Some(crate::session::WindowState {
+            x: Some(f32::from(bounds.origin.x).round() as i32),
+            y: Some(f32::from(bounds.origin.y).round() as i32),
+            width: f32::from(bounds.size.width).round().max(1.0) as u32,
+            height: f32::from(bounds.size.height).round().max(1.0) as u32,
+            maximized: false,
+        });
+    }
+
     pub(crate) fn cross_window_drag_payload(
         &self,
         ix: usize,

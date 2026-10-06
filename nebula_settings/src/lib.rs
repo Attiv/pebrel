@@ -999,6 +999,8 @@ pub struct RuntimeSettings {
     pub cursor_shape: Option<CursorShapeName>,
     pub cursor_blink: Option<bool>,
     pub cursor_motion: CursorMotion,
+    /// Lightweight interface transitions. Defaults on; consumers must also honor OS reduced motion.
+    pub animations: bool,
     pub copy_on_select: bool,
     /// Maximum retained history for new terminals, without altering open sessions.
     pub scrollback_lines: usize,
@@ -1180,6 +1182,7 @@ impl RuntimeSettings {
                 .value("cursor_motion")
                 .and_then(CursorMotion::from_settings)
                 .unwrap_or_default(),
+            animations: raw.bool_on("animations").unwrap_or(true),
             copy_on_select: raw.bool_on("copy_on_select").unwrap_or(false),
             scrollback_lines: scrolling::scrollback_lines(raw),
             scroll_speed: normalize_scroll_speed(
@@ -1616,6 +1619,27 @@ mod tests {
             !RuntimeSettings::from_raw(&RawSettings::from_text("auto_check_updates=0\n"))
                 .auto_check_updates
         );
+    }
+
+    #[test]
+    fn animations_default_on_and_accept_boolean_spellings() {
+        assert!(RuntimeSettings::from_raw(&RawSettings::default()).animations);
+        for value in ["1", "true", "yes", "on"] {
+            assert!(
+                RuntimeSettings::from_raw(&RawSettings::from_text(&format!(
+                    "animations={value}\n"
+                )))
+                .animations
+            );
+        }
+        for value in ["0", "false", "no", "off"] {
+            assert!(
+                !RuntimeSettings::from_raw(&RawSettings::from_text(&format!(
+                    "animations={value}\n"
+                )))
+                .animations
+            );
+        }
     }
 
     #[test]

@@ -4,7 +4,7 @@
 //! platform exposes display DPI, supply the final size before the window is
 //! shown; otherwise keep the existing post-creation sizing fallback.
 
-use gpui::{App, Pixels, Size, Window, px, size};
+use gpui::{App, Bounds, Pixels, Size, Window, point, px, size};
 
 use crate::gpui_shell::terminal::view::TerminalView;
 
@@ -40,6 +40,44 @@ fn fit_native_size(preferred: Size<Pixels>, visible: Option<Size<Pixels>>) -> Si
 
 fn fit_preflight_size(preferred: Size<Pixels>, cx: &App) -> Size<Pixels> {
     fit_native_size(preferred, cx.primary_display().map(|display| display.visible_bounds().size))
+}
+
+pub(super) fn restore_bounds(
+    state: Option<crate::session::WindowState>,
+    visible: Bounds<Pixels>,
+    preferred: Size<Pixels>,
+) -> Bounds<Pixels> {
+    let fitted = preferred.min(&visible.size);
+    let centered = || {
+        Bounds::new(
+            point(
+                visible.origin.x + (visible.size.width - fitted.width) / 2.0,
+                visible.origin.y + (visible.size.height - fitted.height) / 2.0,
+            ),
+            fitted,
+        )
+    };
+    let Some(state) = state else { return centered() };
+    let (Some(x), Some(y)) = (state.x, state.y) else { return centered() };
+    let saved = Bounds::new(point(px(x as f32), px(y as f32)), fitted);
+    let visible_right = visible.origin.x + visible.size.width;
+    let visible_bottom = visible.origin.y + visible.size.height;
+    let saved_right = saved.origin.x + saved.size.width;
+    let saved_bottom = saved.origin.y + saved.size.height;
+    if saved_right <= visible.origin.x
+        || saved_bottom <= visible.origin.y
+        || saved.origin.x >= visible_right
+        || saved.origin.y >= visible_bottom
+    {
+        return centered();
+    }
+    Bounds::new(
+        point(
+            saved.origin.x.max(visible.origin.x).min(visible_right - fitted.width),
+            saved.origin.y.max(visible.origin.y).min(visible_bottom - fitted.height),
+        ),
+        fitted,
+    )
 }
 
 pub(super) fn preferred_size(cx: &App, sidebar_width: f32) -> Option<Size<Pixels>> {

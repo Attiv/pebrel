@@ -77,6 +77,8 @@ pub struct Settings {
     pub cursor_shape: Option<CursorShape>,
     pub cursor_blink: Option<bool>,
     pub cursor_motion: nebula_settings::CursorMotion,
+    /// 用户动画总开关；系统 reduced motion 由 animations_enabled 再合并。
+    pub animations: bool,
     /// 选区完成即复制（旧壳 `copy_on_select` 设置）。
     pub copy_on_select: bool,
     pub scrollback_lines: usize,
@@ -122,6 +124,11 @@ pub(crate) fn ui_language(cx: &App) -> UiLanguage {
 
 pub(crate) fn panel_resize(cx: &App) -> bool {
     cx.try_global::<Settings>().is_some_and(|settings| settings.panel_resize)
+}
+
+/// 动画总门禁：用户偏好与系统 reduced motion 任一关闭，都立即切换。
+pub(crate) fn animations_enabled(cx: &App) -> bool {
+    !cx.reduce_motion() && cx.try_global::<Settings>().is_none_or(|settings| settings.animations)
 }
 
 /// 只查询内存快照，避免动画渲染读盘；初始化前保持默认滑动行为。
@@ -293,6 +300,7 @@ impl Settings {
             }),
             cursor_blink: runtime.cursor_blink,
             cursor_motion: runtime.cursor_motion,
+            animations: runtime.animations,
             copy_on_select: runtime.copy_on_select,
             scrollback_lines: runtime.scrollback_lines,
             scroll_speed: runtime.scroll_speed,

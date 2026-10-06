@@ -87,7 +87,7 @@ impl TerminalView {
             settings.cursor_motion == nebula_settings::CursorMotion::Smooth
         }) && self.output_visible
             && at_bottom
-            && !cx.reduce_motion()
+            && crate::gpui_shell::config::animations_enabled(cx)
             && self.marked_text.as_deref().is_none_or(str::is_empty);
         let now = self.cursor_animation.clock.elapsed();
         let Some(cursor) = cursor.filter(|cursor| cursor.shape != CursorShape::Hidden) else {

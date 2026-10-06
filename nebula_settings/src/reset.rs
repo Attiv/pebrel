@@ -21,6 +21,7 @@ const RESET_KEYS: &[&str] = &[
     "cursor_shape",
     "cursor_blink",
     "cursor_motion",
+    "animations",
     "copy_on_select",
     "focus_follows_mouse",
     "dim_inactive_panes",
@@ -160,6 +161,15 @@ mod tests {
         let settings = RuntimeSettings::from_raw(&RawSettings::from_text(&restored));
         assert_eq!(settings.focus_follows_mouse, None);
         assert!(settings.dim_inactive_panes);
+    }
+
+    #[test]
+    fn resetting_preferences_reenables_animations_without_erasing_other_data() {
+        let original = "animations=0\ncustom_data=keep\n";
+        assert!(!RuntimeSettings::from_raw(&RawSettings::from_text(original)).animations);
+        let restored = default_settings_text(original);
+        assert_eq!(restored, "custom_data=keep\n");
+        assert!(RuntimeSettings::from_raw(&RawSettings::from_text(&restored)).animations);
     }
 
     #[test]

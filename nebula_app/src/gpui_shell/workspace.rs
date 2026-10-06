@@ -651,6 +651,8 @@ pub struct NebulaWorkspace {
     top_tabs_scroll: gpui::ScrollHandle,
     /// 开窗时反推的目标网格（含小屏收拢）；首个终端按它 spawn。
     initial_grid: (u16, u16),
+    /// 普通窗口最后一次非全屏 bounds；最大化时只更新状态位，保留恢复矩形。
+    window_state: Option<crate::session::WindowState>,
     /// 进行中的 tab 拖拽（含未过阈值的待命态）；见 [`TabDrag`]。
     tab_drag: Option<TabDrag>,
     /// 进行中的 pane 拖拽（把分屏里的一个 pane 拉出来成独立 tab）；
@@ -831,6 +833,30 @@ impl NebulaWorkspace {
         window_role: windowing::WindowRole,
         cx: &mut Context<Self>,
     ) -> Self {
+        Self::new_with_window_state(
+            window,
+            ai_events,
+            shell_events,
+            runtime_window_id,
+            runtime_hub,
+            startup,
+            window_role,
+            None,
+            cx,
+        )
+    }
+
+    pub(super) fn new_with_window_state(
+        window: &mut Window,
+        ai_events: Option<std::sync::mpsc::Receiver<crate::ai_hook::AiHookEvent>>,
+        shell_events: Option<std::sync::mpsc::Receiver<crate::gpui_shell::GpuiShellEvent>>,
+        runtime_window_id: u64,
+        runtime_hub: crate::runtime_api::RuntimeHub,
+        startup: windowing::WorkspaceStartup,
+        window_role: windowing::WindowRole,
+        initial_window_state: Option<crate::session::WindowState>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // 启动相关设置只取样一次：本次开窗的恢复决策不能被恢复过程中的
         // 文件变化拆成互相矛盾的 restore/resume 状态。
         let runtime = nebula_settings::RuntimeSettings::load();
@@ -840,7 +866,7 @@ impl NebulaWorkspace {
             window,
             cx,
             sidebar_width,
-            window_role == windowing::WindowRole::Regular,
+            window_role == windowing::WindowRole::Regular && initial_window_state.is_none(),
         );
         let this = cx.entity().downgrade();
         let appearance_sub = window.observe_window_appearance(move |_, cx| {
@@ -931,6 +957,7 @@ impl NebulaWorkspace {
             tabs_list_hot: false,
             top_tabs_scroll: gpui::ScrollHandle::new(),
             initial_grid,
+            window_state: initial_window_state,
             tab_drag: None,
             pane_drag: None,
             cross_window_dock: None,

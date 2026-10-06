@@ -60,6 +60,20 @@ def source_archive(url: str, expected: str, archive: Path, extracted: Path) -> P
     return directories[0]
 
 
+def build_environment(sources: Path, ndk: Path, output: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"):
+        environment.pop(key, None)
+    # The verified source archive has no Git metadata. Never discover the
+    # enclosing Pebrel checkout and mistake its release tag for a VT version.
+    environment.update(
+        ANDROID_NDK_HOME=str(ndk),
+        ZIG_GLOBAL_CACHE_DIR=str(output / "cache/global"),
+        GIT_CEILING_DIRECTORIES=str(sources.resolve().parent),
+    )
+    return environment
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "mobile/android/ghostty/build/upstream")
@@ -87,8 +101,7 @@ def main() -> None:
     zig = zig_root / ("zig.exe" if windows else "zig")
     if subprocess.check_output([zig, "version"], text=True, encoding="utf-8").strip() != pins["zig_version"]:
         raise SystemExit("Unexpected Zig version")
-    environment = os.environ.copy()
-    environment.update(ANDROID_NDK_HOME=str(ndk), ZIG_GLOBAL_CACHE_DIR=str(output / "cache/global"))
+    environment = build_environment(sources, ndk, output)
     targets = {"arm64-v8a": "aarch64", "x86_64": "x86_64"}
     for abi, architecture in targets.items():
         if args.abi not in (abi, "all"):

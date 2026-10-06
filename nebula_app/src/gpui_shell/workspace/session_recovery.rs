@@ -218,6 +218,8 @@ impl NebulaWorkspace {
                 active_pane,
             });
         }
-        Session::new(active_out, tabs)
+        let mut session = Session::new(active_out, tabs);
+        session.window = self.window_state;
+        session
     }
 }

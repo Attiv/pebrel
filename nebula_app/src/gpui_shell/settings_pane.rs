@@ -16,11 +16,11 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement as _, IntoElement, KeyDownEvent, ModifiersChangedEvent, MouseButton,
-    MouseMoveEvent, ParentElement as _, Render, RenderImage, Rgba as GpuiRgba, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, anchored, deferred,
-    div, img, px,
+    Animation, AnimationExt as _, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, Hsla, InteractiveElement as _, IntoElement, KeyDownEvent, ModifiersChangedEvent,
+    MouseButton, MouseMoveEvent, ParentElement as _, Render, RenderImage, Rgba as GpuiRgba,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window,
+    anchored, deferred, div, ease_out_quint, img, px,
 };
 use gpui_component::input::InputEvent;
 use gpui_component::select::{SelectEvent, SelectItem};
@@ -750,6 +750,7 @@ impl SettingsPane {
         match key {
             "follow_system_theme" => flag!(follow_system_theme),
             "copy_on_select" => flag!(copy_on_select),
+            "animations" => flag!(animations),
             "focus_follows_mouse" => Some((cur.focus_follows_mouse.is_some(), String::new())),
             "dim_inactive_panes" => flag!(dim_inactive_panes),
             "multiline_paste_confirm" => flag!(multiline_paste_confirm),
@@ -1202,6 +1203,13 @@ impl SettingsPane {
                         cx,
                     ))
                     .child(self.switch_row(
+                        "animations",
+                        language.pick("界面动画", "Interface animations"),
+                        help("animations", language),
+                        self.runtime.animations,
+                        cx,
+                    ))
+                    .child(self.switch_row(
                         "cjk_bold_regular",
                         language.pick("中日韩粗体提亮", "Brighten CJK bold"),
                         help("cjk_bold_regular", language),
@@ -1458,6 +1466,19 @@ impl Render for SettingsPane {
         crate::gpui_shell::theme::sync_component_focus_ring(window, cx);
         let nav = self.render_nav(window, cx);
         let content = self.section_content(window, cx);
+        let content = if crate::gpui_shell::config::animations_enabled(cx) {
+            div()
+                .w_full()
+                .child(content)
+                .with_animation(
+                    ("settings-section-enter", self.active_section),
+                    Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
+                    |content, t| content.opacity(t),
+                )
+                .into_any_element()
+        } else {
+            content
+        };
         // 这里**不再**挂 font_family。旧壳设置页整页走终端 mono，是因为自绘
         // 只有一套字形缓存；GPUI 壳没有这个限制，继承那个观感只会让中文说明
         // 字距发虚、行更长。根字体由 `theme.font_family`（Windows 上是雅黑

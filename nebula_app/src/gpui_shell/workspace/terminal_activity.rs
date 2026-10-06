@@ -181,6 +181,7 @@ mod tests {
                     crate::runtime_api::RuntimeHub::new(),
                     windowing::WorkspaceStartup::Empty,
                     windowing::WindowRole::Regular,
+                    None,
                     cx,
                 );
                 for count in [2, 1] {
