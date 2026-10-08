@@ -840,11 +840,19 @@ fn completion_metadata_uses_authenticated_channels_and_closes_cancelled_queries(
             let entry = pool.remove(&fixture.route.pool_key()).unwrap();
             pool.insert(
                 fixture.route.pool_key(),
-                super::super::PooledSession::new(entry.session, entry.destination),
+                super::super::PooledSession::new(
+                    entry.session,
+                    entry.remote_forward_routes,
+                    entry.destination,
+                ),
             );
             pool.insert(
                 "completion-ambiguous-fixture".into(),
-                super::super::PooledSession::new(acquired.session.clone(), destination.clone()),
+                super::super::PooledSession::new(
+                    acquired.session.clone(),
+                    acquired.remote_forward_routes.clone(),
+                    destination.clone(),
+                ),
             );
         }
         assert!(

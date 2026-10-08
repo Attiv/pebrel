@@ -105,6 +105,9 @@ impl Fixture {
                 port: 22,
                 allow_prompt: false,
                 handshake: super::super::lifecycle::Handshake::default(),
+                remote_forward_routes: std::sync::Arc::new(std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                )),
                 known_hosts_path: Some(known_hosts),
             },
         )
@@ -128,8 +131,8 @@ fn forwards_bytes_and_half_close_and_releases_listener_and_connections() {
     check(async {
         let mut fixture = Fixture::new().await;
         let forward = bind_forward(fixture.session.clone(), 0, 3000).await.unwrap();
-        let port = forward.local_port();
-        assert_eq!(forward.remote_port(), 3000);
+        let port = forward.local_port;
+        assert_eq!(forward.remote_port, 3000);
         assert!(bind_forward(fixture.session.clone(), port, 3001).await.is_err());
         let mut socket = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.unwrap();
         assert_eq!(fixture.opened.recv().await, Some(3000));
@@ -158,7 +161,7 @@ fn rejected_channel_closes_only_that_client() {
         let forward = bind_forward(fixture.session.clone(), 0, 1).await.unwrap();
         for _ in 0..2 {
             let mut socket =
-                TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port())).await.unwrap();
+                TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port)).await.unwrap();
             assert!(matches!(socket.read(&mut [0]).await, Ok(0) | Err(_)));
         }
         assert!(!fixture.session.is_closed());
@@ -172,13 +175,11 @@ fn channel_tasks_are_bounded_and_resume_after_a_client_closes() {
         let forward = bind_forward(fixture.session.clone(), 0, 3000).await.unwrap();
         let mut clients = Vec::new();
         for _ in 0..MAX_CONNECTIONS {
-            clients.push(
-                TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port())).await.unwrap(),
-            );
+            clients
+                .push(TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port)).await.unwrap());
             assert_eq!(fixture.opened.recv().await, Some(3000));
         }
-        let _waiting =
-            TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port())).await.unwrap();
+        let _waiting = TcpStream::connect((Ipv4Addr::LOCALHOST, forward.local_port)).await.unwrap();
         tokio::task::yield_now().await;
         assert!(fixture.opened.try_recv().is_err());
         clients.pop().unwrap().shutdown().await.unwrap();

@@ -1344,6 +1344,9 @@
   "ssh.ports.pending": "正在启动端口转发…",
   "ssh.ports.unavailable": "SSH 网络运行时不可用",
   "ssh.ports.started": "正在将 127.0.0.1:{local} 转发至 {host} 的 {remote} 端口",
+  "ssh.ports.remote_started": "正在将 {host} 的 {remote} 端口转发至 127.0.0.1:{local}",
+  "ssh.ports.direction.local": "本地 → 远端",
+  "ssh.ports.direction.remote": "远端 → 本地",
   "terminal_effect": {
     "title": "自定义终端效果",
     "description": "为文字和光标所在的终端画面添加效果，不改变背景设置。导入后点击启用。",

@@ -34,7 +34,7 @@ mod integration;
 mod lifecycle;
 mod route;
 mod transcript;
-pub(crate) use forward::{LocalForward, open_local_forward};
+pub(crate) use forward::{PortForward, open_local_forward, open_remote_forward};
 pub(crate) use integration::setup_cli as setup_ai_cli;
 use route::{ResolvedRoute, RouteTransport};
 pub use transcript::TranscriptReader;
@@ -51,16 +51,25 @@ pub(crate) fn terminal_config(
 type SessionError = Box<dyn std::error::Error + Send + Sync>;
 type ClientSession = client::Handle<ClientHandler>;
 type SharedSession = Arc<ClientSession>;
+type RemoteForwardRoutes = Arc<std::sync::Mutex<HashMap<u16, RemoteForwardRoute>>>;
+
+#[derive(Clone, Copy)]
+enum RemoteForwardRoute {
+    Pending,
+    Active(u16),
+}
 
 struct AcquiredSession {
     key: String,
     session: SharedSession,
+    remote_forward_routes: RemoteForwardRoutes,
     reused: bool,
     jump_sessions: Vec<SharedSession>,
 }
 
 struct OpenedTransport {
     session: ClientSession,
+    remote_forward_routes: RemoteForwardRoutes,
     jump_sessions: Vec<SharedSession>,
 }
 
@@ -458,6 +467,7 @@ struct ClientHandler {
     port: u16,
     allow_prompt: bool,
     handshake: lifecycle::Handshake,
+    remote_forward_routes: RemoteForwardRoutes,
     #[cfg(test)]
     known_hosts_path: Option<PathBuf>,
 }
@@ -522,6 +532,28 @@ impl client::Handler for ClientHandler {
             },
         }
     }
+
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        _connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let local_port = u16::try_from(connected_port).ok().and_then(|remote_port| {
+            self.remote_forward_routes.lock().ok().and_then(|routes| {
+                match routes.get(&remote_port) {
+                    Some(RemoteForwardRoute::Active(local_port)) => Some(*local_port),
+                    Some(RemoteForwardRoute::Pending) | None => None,
+                }
+            })
+        });
+        forward::accept_remote_channel(channel, local_port, reply).await;
+        Ok(())
+    }
 }
 
 pub(crate) fn runtime() -> io::Result<&'static tokio::runtime::Runtime> {
@@ -543,14 +575,24 @@ pub(crate) fn runtime() -> io::Result<&'static tokio::runtime::Runtime> {
 
 struct PooledSession {
     session: SharedSession,
+    remote_forward_routes: RemoteForwardRoutes,
     destination: String,
     id: u64,
 }
 
 impl PooledSession {
-    fn new(session: SharedSession, destination: String) -> Self {
+    fn new(
+        session: SharedSession,
+        remote_forward_routes: RemoteForwardRoutes,
+        destination: String,
+    ) -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Self { session, destination, id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
+        Self {
+            session,
+            remote_forward_routes,
+            destination,
+            id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        }
     }
 }
 
@@ -675,14 +717,19 @@ async fn authenticated_route<H: SshEventHost>(
     let existing = if unattended {
         None
     } else {
-        connection_pool().lock().await.get(&key).map(|entry| entry.session.clone())
+        connection_pool()
+            .lock()
+            .await
+            .get(&key)
+            .map(|entry| (entry.session.clone(), entry.remote_forward_routes.clone()))
     };
-    if let Some(existing) = existing {
+    if let Some((existing, remote_forward_routes)) = existing {
         if !existing.is_closed() {
             info!("复用已认证 SSH 连接: {key}");
             return Ok(AcquiredSession {
                 key,
                 session: existing,
+                remote_forward_routes,
                 reused: true,
                 jump_sessions: Vec::new(),
             });
@@ -715,20 +762,25 @@ async fn authenticated_route<H: SshEventHost>(
     }
 
     let session = Arc::new(transport.session);
+    let remote_forward_routes = transport.remote_forward_routes;
     if unattended {
         return Ok(AcquiredSession {
             key,
             session,
+            remote_forward_routes,
             reused: false,
             jump_sessions: transport.jump_sessions,
         });
     }
     let mut pool = connection_pool().lock().await;
-    if let Some(existing) = pool.get(&key).map(|entry| entry.session.clone()) {
+    if let Some((existing, existing_routes)) =
+        pool.get(&key).map(|entry| (entry.session.clone(), entry.remote_forward_routes.clone()))
+    {
         if !existing.is_closed() {
             return Ok(AcquiredSession {
                 key,
                 session: existing,
+                remote_forward_routes: existing_routes,
                 reused: true,
                 jump_sessions: Vec::new(),
             });
@@ -736,9 +788,19 @@ async fn authenticated_route<H: SshEventHost>(
     }
     pool.insert(
         key.clone(),
-        PooledSession::new(session.clone(), route.destination.original.clone()),
+        PooledSession::new(
+            session.clone(),
+            remote_forward_routes.clone(),
+            route.destination.original.clone(),
+        ),
     );
-    Ok(AcquiredSession { key, session, reused: false, jump_sessions: transport.jump_sessions })
+    Ok(AcquiredSession {
+        key,
+        session,
+        remote_forward_routes,
+        reused: false,
+        jump_sessions: transport.jump_sessions,
+    })
 }
 
 #[cfg(test)]
@@ -757,11 +819,13 @@ async fn open_transport(
 ) -> Result<OpenedTransport, SessionError> {
     let destination = &route.destination;
     let handshake = lifecycle::Handshake::default();
+    let remote_forward_routes = Arc::new(std::sync::Mutex::new(HashMap::new()));
     let handler = ClientHandler {
         host: destination.host.clone(),
         port: destination.port,
         allow_prompt: allow_host_key_prompt,
         handshake: handshake.clone(),
+        remote_forward_routes: remote_forward_routes.clone(),
         #[cfg(test)]
         known_hosts_path: route.known_hosts_path.clone(),
     };
@@ -830,7 +894,7 @@ async fn open_transport(
             handshake.connect(client::connect_stream(config, stream, handler)).await?
         },
     };
-    Ok(OpenedTransport { session, jump_sessions })
+    Ok(OpenedTransport { session, remote_forward_routes, jump_sessions })
 }
 
 async fn authenticate(

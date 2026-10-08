@@ -1344,6 +1344,9 @@
   "ssh.ports.pending": "Starting port forwarding…",
   "ssh.ports.unavailable": "SSH network runtime unavailable",
   "ssh.ports.started": "Forwarding 127.0.0.1:{local} to {host} port {remote}",
+  "ssh.ports.remote_started": "Forwarding {host} port {remote} to 127.0.0.1:{local}",
+  "ssh.ports.direction.local": "Local → remote",
+  "ssh.ports.direction.remote": "Remote → local",
   "terminal_effect": {
     "title": "Custom terminal effects",
     "description": "Apply effects to the terminal text and cursor without changing the background. Enable after importing.",
