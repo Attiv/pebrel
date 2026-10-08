@@ -176,7 +176,7 @@ class NativeSuiteTests(unittest.TestCase):
         release = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
         self.assertIn("run: python scripts/ci_native_tests.py\n", release)
 
-    def test_nextest_reserves_only_shared_settings_and_the_heavy_git_fixture(self):
+    def test_nextest_reserves_only_shared_settings_and_exact_bounded_git_fixtures(self):
         root = Path(__file__).resolve().parents[2]
         config = tomllib.loads((root / ".config/nextest.toml").read_text(encoding="utf-8"))
         self.assertEqual(config["test-groups"], {"theme-studio": {"max-threads": 1}})
@@ -188,17 +188,37 @@ class NativeSuiteTests(unittest.TestCase):
                           " or test(environment_refresh_switch_is_searchable_and_persists)"
                           " or test(pasted_proxy_scheme_updates_the_visible_protocol_and_saved_url)"
                           " or test(capsule_uses_inset_thumb_full_hit_targets_and_keyboard_selection)"
-                          " or test(long_segments_use_a_real_dropdown_without_losing_preference_updates)"
+                          " or test(completion_capsules_keep_all_chinese_choices_at_large_font_size)"
                           " or test(font_size_click_input_commits_cancels_and_bounds_values)"
                           " or test(cjk_dropdown_selection_preserves_the_english_font_chain)"
-                          " or test(review_regression_font_fields_align_and_dropdown_toggles_with_search)",
+                          " or test(review_regression_font_fields_align_and_dropdown_toggles_with_search)"
+                          " or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::hybrid_completion_uses_window_tab_dispatch_in_both_workspace_layouts)",
                 "test-group": "theme-studio",
             }, {
                 "filter": "test(=gpui_shell::terminal::view::startup_tests::"
                           "git_completion_real_repository_reaches_all_modes_and_preserves_quoted_edits)",
                 "threads-required": "num-test-threads",
+            }, {
+                "filter": "test(=git_completion::tests::real_explicit_tracking_creates_and_inherits_the_expected_upstream)"
+                          " or test(=git_completion::tests::real_remote_guesses_follow_configuration_and_refspecs)"
+                          " or test(=git_completion::tests::real_branches_cache_invalidation_and_directory_context)",
+                "threads-required": "num-test-threads",
+            }, {
+                "filter": "test(=completion::tests::completion_requests_work_without_a_view_and_keep_repository_invalidation)"
+                          " or test(=completion::tests::editor_cursor_requests_replace_only_the_active_token_and_keep_following_options)"
+                          " or test(=completion::tests::checkout_completion_combines_branches_and_paths_and_scopes_remote_demand)"
+                          " or test(=completion::tests::explicit_tracking_requests_keep_edits_scoped_and_do_not_execute)",
+                "threads-required": "num-test-threads",
             }],
         })
+
+        # 核对真实函数名，避免配置和期望同时保留旧名字却漏掉写设置的测试。
+        segmented = (root / "nebula_app/src/gpui_shell/settings_pane/segmented/tests.rs").read_text(encoding="utf-8")
+        for name in (
+            "capsule_uses_inset_thumb_full_hit_targets_and_keyboard_selection",
+            "completion_capsules_keep_all_chinese_choices_at_large_font_size",
+        ):
+            self.assertIn(f"fn {name}(", segmented)
 
     def test_native_caches_are_default_branch_snapshots_not_per_pr_uploads(self):
         root = Path(__file__).resolve().parents[2]
