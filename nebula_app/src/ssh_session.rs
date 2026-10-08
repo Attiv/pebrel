@@ -52,6 +52,13 @@ type SessionError = Box<dyn std::error::Error + Send + Sync>;
 type ClientSession = client::Handle<ClientHandler>;
 type SharedSession = Arc<ClientSession>;
 type RemoteForwardRoutes = Arc<std::sync::Mutex<HashMap<u16, RemoteForwardRoute>>>;
+type RemoteForwardOwners = Arc<tokio::sync::Mutex<HashMap<(u16, u16), PortForward>>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct RemoteForwardSpec {
+    remote_port: u16,
+    local_port: u16,
+}
 
 #[derive(Clone, Copy)]
 enum RemoteForwardRoute {
@@ -63,6 +70,7 @@ struct AcquiredSession {
     key: String,
     session: SharedSession,
     remote_forward_routes: RemoteForwardRoutes,
+    remote_forward_owners: RemoteForwardOwners,
     reused: bool,
     jump_sessions: Vec<SharedSession>,
 }
@@ -213,6 +221,7 @@ pub struct SshDestination {
     pub port: u16,
     identity_files: Vec<PathBuf>,
     proxy_jump: Option<String>,
+    remote_forwards: Vec<RemoteForwardSpec>,
 }
 
 impl SshDestination {
@@ -234,6 +243,7 @@ impl SshDestination {
             port,
             identity_files: Vec::new(),
             proxy_jump: None,
+            remote_forwards: Vec::new(),
         })
     }
 
@@ -303,6 +313,7 @@ impl SshDestination {
             port,
             identity_files: default_identity_files(),
             proxy_jump: None,
+            remote_forwards: Vec::new(),
         })
     }
 
@@ -372,6 +383,7 @@ fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
     let mut port = None;
     let mut identity_files = Vec::new();
     let mut proxy_jump = None;
+    let mut remote_forwards = Vec::new();
     for line in text.lines() {
         let tokens = crate::ssh::ssh_config_tokens(line);
         let Some(key) = tokens.first() else { continue };
@@ -391,6 +403,9 @@ fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
             "proxyjump" if !value.eq_ignore_ascii_case("none") => {
                 proxy_jump = Some(value);
             },
+            "remoteforward" => {
+                remote_forwards.push(parse_remote_forward(&tokens[1..])?);
+            },
             _ => {},
         }
     }
@@ -401,8 +416,33 @@ fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
         port: port.unwrap_or(22),
         identity_files,
         proxy_jump,
+        remote_forwards,
     })
 }
+
+fn parse_remote_forward(values: &[String]) -> Option<RemoteForwardSpec> {
+    if values.len() != 2 {
+        return None;
+    }
+    let remote_port = if let Some((bind_host, port)) = values[0].rsplit_once(':') {
+        if !matches!(bind_host, "localhost" | "127.0.0.1") {
+            return None;
+        }
+        port
+    } else {
+        values[0].as_str()
+    }
+    .parse::<u16>()
+    .ok()
+    .filter(|port| *port != 0)?;
+    let (local_host, local_port) = values[1].rsplit_once(':')?;
+    if !matches!(local_host, "localhost" | "127.0.0.1") {
+        return None;
+    }
+    let local_port = local_port.parse::<u16>().ok().filter(|port| *port != 0)?;
+    Some(RemoteForwardSpec { remote_port, local_port })
+}
+
 fn find_ssh() -> PathBuf {
     if let Some(root) = std::env::var_os("SystemRoot") {
         let path = PathBuf::from(root).join("System32").join("OpenSSH").join("ssh.exe");
@@ -576,6 +616,7 @@ pub(crate) fn runtime() -> io::Result<&'static tokio::runtime::Runtime> {
 struct PooledSession {
     session: SharedSession,
     remote_forward_routes: RemoteForwardRoutes,
+    remote_forward_owners: RemoteForwardOwners,
     destination: String,
     id: u64,
 }
@@ -590,6 +631,7 @@ impl PooledSession {
         Self {
             session,
             remote_forward_routes,
+            remote_forward_owners: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             destination,
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
@@ -717,19 +759,22 @@ async fn authenticated_route<H: SshEventHost>(
     let existing = if unattended {
         None
     } else {
-        connection_pool()
-            .lock()
-            .await
-            .get(&key)
-            .map(|entry| (entry.session.clone(), entry.remote_forward_routes.clone()))
+        connection_pool().lock().await.get(&key).map(|entry| {
+            (
+                entry.session.clone(),
+                entry.remote_forward_routes.clone(),
+                entry.remote_forward_owners.clone(),
+            )
+        })
     };
-    if let Some((existing, remote_forward_routes)) = existing {
+    if let Some((existing, remote_forward_routes, remote_forward_owners)) = existing {
         if !existing.is_closed() {
             info!("复用已认证 SSH 连接: {key}");
             return Ok(AcquiredSession {
                 key,
                 session: existing,
                 remote_forward_routes,
+                remote_forward_owners,
                 reused: true,
                 jump_sessions: Vec::new(),
             });
@@ -768,19 +813,25 @@ async fn authenticated_route<H: SshEventHost>(
             key,
             session,
             remote_forward_routes,
+            remote_forward_owners: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             reused: false,
             jump_sessions: transport.jump_sessions,
         });
     }
     let mut pool = connection_pool().lock().await;
-    if let Some((existing, existing_routes)) =
-        pool.get(&key).map(|entry| (entry.session.clone(), entry.remote_forward_routes.clone()))
-    {
+    if let Some((existing, existing_routes, existing_owners)) = pool.get(&key).map(|entry| {
+        (
+            entry.session.clone(),
+            entry.remote_forward_routes.clone(),
+            entry.remote_forward_owners.clone(),
+        )
+    }) {
         if !existing.is_closed() {
             return Ok(AcquiredSession {
                 key,
                 session: existing,
                 remote_forward_routes: existing_routes,
+                remote_forward_owners: existing_owners,
                 reused: true,
                 jump_sessions: Vec::new(),
             });
@@ -794,10 +845,16 @@ async fn authenticated_route<H: SshEventHost>(
             route.destination.original.clone(),
         ),
     );
+    let remote_forward_owners = pool
+        .get(&key)
+        .expect("newly inserted SSH pool entry must exist")
+        .remote_forward_owners
+        .clone();
     Ok(AcquiredSession {
         key,
         session,
         remote_forward_routes,
+        remote_forward_owners,
         reused: false,
         jump_sessions: transport.jump_sessions,
     })

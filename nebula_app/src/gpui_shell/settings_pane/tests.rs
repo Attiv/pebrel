@@ -2,6 +2,38 @@ use super::*;
 
 #[cfg(feature = "gpui-test-support")]
 #[gpui::test]
+fn animation_effects_switch_is_visible_in_appearance_and_persists(cx: &mut gpui::TestAppContext) {
+    use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
+
+    let _fixture_guard = lock_theme_studio();
+    let _guard = SettingsBytesGuard::capture();
+    nebula_settings::persist_keys(&[("animations", "1".into())]).unwrap();
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut pane_out = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let view = cx.new(|cx| SettingsPane::new(window, cx));
+        view.update(cx, |pane, _| pane.active_section = 1);
+        pane_out = Some(view.clone());
+        gpui_component::Root::new(view, window, cx)
+    });
+    let pane = pane_out.unwrap();
+    cx.simulate_resize(gpui::size(px(1280.0), px(1000.0)));
+    cx.update(|window, cx| {
+        let _ = window.draw(cx);
+    });
+    let bounds = cx.debug_bounds("nebula-switch-animations").expect("animation effects switch");
+    assert!(bounds.size.width > px(0.0) && bounds.size.height > px(0.0));
+    cx.simulate_click(bounds.center(), gpui::Modifiers::default());
+    cx.run_until_parked();
+    assert!(!pane.read_with(cx, |pane, _| pane.runtime.animations));
+    assert!(!RuntimeSettings::load().animations);
+}
+
+#[cfg(feature = "gpui-test-support")]
+#[gpui::test]
 fn environment_refresh_switch_is_searchable_and_persists(cx: &mut gpui::TestAppContext) {
     use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
 

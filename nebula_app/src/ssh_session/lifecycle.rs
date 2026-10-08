@@ -155,6 +155,25 @@ fn input_bridge(receiver: Receiver<Msg>) -> (mpsc::UnboundedReceiver<Msg>, watch
     (input_rx, cancel_rx)
 }
 
+async fn ensure_configured_remote_forwards(
+    destination: &str,
+    resolved: &SshDestination,
+    acquired: &super::AcquiredSession,
+) -> Result<(), SessionError> {
+    let mut owners = acquired.remote_forward_owners.lock().await;
+    for forward in &resolved.remote_forwards {
+        let key = (forward.remote_port, forward.local_port);
+        if owners.contains_key(&key) {
+            continue;
+        }
+        let handle =
+            super::open_remote_forward(destination, forward.remote_port, forward.local_port)
+                .await?;
+        owners.insert(key, handle);
+    }
+    Ok(())
+}
+
 pub(super) async fn run<H: SshEventHost>(
     destination: String,
     initial_remote_cwd: Option<String>,
@@ -179,6 +198,7 @@ pub(super) async fn run<H: SshEventHost>(
         .await??;
         let mut acquired =
             super::authenticated_session_at(&resolved, &profile, Some(&event_proxy), 0).await?;
+        ensure_configured_remote_forwards(&destination, &resolved, &acquired).await?;
         let (mut channel, hook_token) =
             match open_shell(&acquired, initial_size, initial_remote_cwd.as_deref(), &event_proxy)
                 .await
@@ -190,6 +210,7 @@ pub(super) async fn run<H: SshEventHost>(
                     acquired =
                         super::authenticated_session_at(&resolved, &profile, Some(&event_proxy), 0)
                             .await?;
+                    ensure_configured_remote_forwards(&destination, &resolved, &acquired).await?;
                     open_shell(&acquired, initial_size, initial_remote_cwd.as_deref(), &event_proxy)
                         .await?
                 },

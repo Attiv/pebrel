@@ -36,13 +36,24 @@ fn copied_profile_resolves_the_endpoint_but_retains_its_credential_identity() {
 
 #[test]
 fn parses_resolved_ssh_config() {
-    let config =
-        "user deploy\nhostname server.internal\nport 2200\nidentityfile ~/.ssh/id_ed25519\n";
+    let config = concat!(
+        "user deploy\nhostname server.internal\nport 2200\n",
+        "identityfile ~/.ssh/id_ed25519\n",
+        "remoteforward 127.0.0.1:8443 localhost:443\n",
+        "remoteforward 9443 127.0.0.1:8444\n",
+    );
     let destination = parse_resolved_config("prod", config).unwrap();
     assert_eq!(destination.user, "deploy");
     assert_eq!(destination.host, "server.internal");
     assert_eq!(destination.port, 2200);
     assert_eq!(destination.identity_files.len(), 1);
+    assert_eq!(
+        destination.remote_forwards,
+        vec![
+            super::RemoteForwardSpec { remote_port: 8443, local_port: 443 },
+            super::RemoteForwardSpec { remote_port: 9443, local_port: 8444 },
+        ]
+    );
 }
 
 #[cfg(windows)]
@@ -116,6 +127,8 @@ fn fallback_ssh_config_resolves_aliases_when_openssh_probe_cannot_run() {
         "    Port 2200\r\n",
         "    IdentityFile \"D:\\keys\\key one.pem\"\r\n",
         "    ProxyJump bastion\r\n",
+        "    RemoteForward 127.0.0.1:9000 localhost:3000\r\n",
+        "    RemoteForward 9001 127.0.0.1:3001\r\n",
     );
     let destination = resolve_from_ssh_config_text("rain", config).unwrap().unwrap();
     assert_eq!(destination.original, "rain");
@@ -131,6 +144,13 @@ fn fallback_ssh_config_resolves_aliases_when_openssh_probe_cannot_run() {
         vec![default_key, PathBuf::from(r"D:\keys\key one.pem"),]
     );
     assert_eq!(destination.proxy_jump.as_deref(), Some("bastion"));
+    assert_eq!(
+        destination.remote_forwards,
+        vec![
+            super::RemoteForwardSpec { remote_port: 9000, local_port: 3000 },
+            super::RemoteForwardSpec { remote_port: 9001, local_port: 3001 },
+        ]
+    );
 
     let explicit = resolve_from_ssh_config_text("deploy@rain:2222", config).unwrap().unwrap();
     assert_eq!(explicit.user, "deploy");
@@ -146,6 +166,8 @@ fn fallback_refuses_incomplete_routes_instead_of_connecting_directly() {
         "HostName %h.example",
         "Port broken",
         "HostName \"unterminated",
+        "RemoteForward 9000 0.0.0.0:80",
+        "RemoteForward 0 localhost:80",
     ] {
         let config = format!("Host rain\n User root\n {directive}\n");
         assert!(resolve_from_ssh_config_text("rain", &config).is_err(), "{directive}");

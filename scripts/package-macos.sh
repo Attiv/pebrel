@@ -204,10 +204,10 @@ if [[ "$channel" == "stable" ]]; then
   volume_name="Pebrel"
 else
   release="$version-preview.$preview_id"
-  bundle_name="Pebrel Preview"
+  bundle_name="Pebrel"
   bundle_id="io.github.kuddev.pebrel.preview"
   asset_architecture="$architecture"
-  volume_name="Pebrel Preview"
+  volume_name="Pebrel"
 fi
 dmg_path="$output_directory/Pebrel-v$release-macos-$asset_architecture.dmg"
 if [[ -e "$dmg_path" && $force -ne 1 ]]; then

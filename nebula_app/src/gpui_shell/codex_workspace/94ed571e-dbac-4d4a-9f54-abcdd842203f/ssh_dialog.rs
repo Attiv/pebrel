@@ -334,7 +334,7 @@ fn show_port_forward_dialog(
     let local_input = cx.new(|cx| InputState::new(window, cx).placeholder("3000"));
     let focus_input = remote_input.clone();
     let inputs = [remote_input.clone(), local_input.clone()];
-    let remote_direction = Rc::new(Cell::new(false));
+    let remote_direction = Rc::new(Cell::new(true));
     let target = view.downgrade();
     let language = workspace_ui_language();
 

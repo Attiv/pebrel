@@ -86,6 +86,13 @@ impl SettingsPane {
             .group(language.pick("界面", "Interface"), cx)
             .child(self.font_size_row(true, cx))
             .child(self.switch_row(
+                "animations",
+                language.pick("动画效果", "Animation effects"),
+                help("animations", language),
+                self.runtime.animations,
+                cx,
+            ))
+            .child(self.switch_row(
                 "dim_inactive_panes",
                 language.text(crate::i18n::Message::SettingsPanesDimInactive),
                 language.text(crate::i18n::Message::SettingsPanesDimInactiveDescription),

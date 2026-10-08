@@ -46,7 +46,7 @@ class DmgSizingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             stage = root / "stage"
-            executable = stage / "Pebrel Preview.app/Contents/MacOS/pebrel"
+            executable = stage / "Pebrel.app/Contents/MacOS/pebrel"
             executable.parent.mkdir(parents=True)
             with executable.open("wb") as stream:
                 stream.write(b"pebrel-start")
@@ -55,7 +55,7 @@ class DmgSizingTests(unittest.TestCase):
             (stage / "Applications").symlink_to("/Applications")
             image = root / "test.dmg"
             subprocess.run([
-                "hdiutil", "create", "-volname", "Pebrel Preview", "-fs", "HFS+",
+                "hdiutil", "create", "-volname", "Pebrel", "-fs", "HFS+",
                 "-size", f"{image_size_mib(stage)}m", "-srcfolder", str(stage),
                 "-format", "UDZO", str(image),
             ], check=True, capture_output=True)

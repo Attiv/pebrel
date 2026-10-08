@@ -1373,13 +1373,6 @@ impl SettingsPane {
                         cx,
                     ))
                     .child(self.switch_row(
-                        "animations",
-                        language.pick("界面动画", "Interface animations"),
-                        help("animations", language),
-                        self.runtime.animations,
-                        cx,
-                    ))
-                    .child(self.switch_row(
                         "cjk_bold_regular",
                         language.pick("中日韩粗体提亮", "Brighten CJK bold"),
                         help("cjk_bold_regular", language),

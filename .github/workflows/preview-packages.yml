@@ -449,7 +449,7 @@ jobs:
           }
           trap cleanup_mount EXIT
 
-          app="$mount_point/Pebrel Preview.app"
+          app="$mount_point/Pebrel.app"
           codesign --verify --deep --strict --verbose=2 "$app"
           plutil -lint "$app/Contents/Info.plist"
           test "$(plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist")" = \

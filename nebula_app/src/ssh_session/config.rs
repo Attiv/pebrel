@@ -29,6 +29,7 @@ pub(super) fn resolve_from_ssh_config_text(
     let (alias, explicit_port) = parse_host_port_optional(host_port)?;
     let (mut user, mut hostname, mut port, mut proxy_jump) = (None, None, None, None);
     let mut identities = Vec::new();
+    let mut remote_forwards = Vec::new();
     let mut identities_specified = false;
     let mut active = true;
     let mut matched = false;
@@ -49,6 +50,13 @@ pub(super) fn resolve_from_ssh_config_text(
             continue;
         }
         if !active {
+            continue;
+        }
+        if keyword == "remoteforward" {
+            let forward = super::parse_remote_forward(values)
+                .ok_or_else(|| invalid("unsupported RemoteForward; use loopback TCP endpoints"))?;
+            remote_forwards.push(forward);
+            matched = true;
             continue;
         }
         let [value] = values else { return Err(invalid(format!("invalid {keyword} value"))) };
@@ -111,6 +119,7 @@ pub(super) fn resolve_from_ssh_config_text(
         port: explicit_port.or(port).unwrap_or(22),
         identity_files: if identities_specified { identities } else { default_identity_files() },
         proxy_jump: proxy_jump.filter(|jump| !jump.eq_ignore_ascii_case("none")),
+        remote_forwards,
     }))
 }
 
