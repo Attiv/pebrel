@@ -34,7 +34,7 @@ mod integration;
 mod lifecycle;
 mod route;
 mod transcript;
-pub(crate) use forward::{PortForward, open_local_forward, open_remote_forward};
+pub(crate) use forward::{LocalForward, PortForward, open_local_forward, open_remote_forward};
 pub(crate) use integration::setup_cli as setup_ai_cli;
 use route::{ResolvedRoute, RouteTransport};
 pub use transcript::TranscriptReader;
