@@ -424,8 +424,9 @@ fn parse_remote_forward(values: &[String]) -> Option<RemoteForwardSpec> {
     if values.len() != 2 {
         return None;
     }
+    // OpenSSH's `ssh -G` brackets TCP hosts, including IPv4 addresses and names.
     let remote_port = if let Some((bind_host, port)) = values[0].rsplit_once(':') {
-        if !matches!(bind_host, "localhost" | "127.0.0.1") {
+        if !matches!(bind_host, "localhost" | "127.0.0.1" | "[localhost]" | "[127.0.0.1]") {
             return None;
         }
         port
@@ -436,7 +437,7 @@ fn parse_remote_forward(values: &[String]) -> Option<RemoteForwardSpec> {
     .ok()
     .filter(|port| *port != 0)?;
     let (local_host, local_port) = values[1].rsplit_once(':')?;
-    if !matches!(local_host, "localhost" | "127.0.0.1") {
+    if !matches!(local_host, "localhost" | "127.0.0.1" | "[localhost]" | "[127.0.0.1]") {
         return None;
     }
     let local_port = local_port.parse::<u16>().ok().filter(|port| *port != 0)?;

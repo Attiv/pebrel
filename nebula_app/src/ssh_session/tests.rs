@@ -56,6 +56,86 @@ fn parses_resolved_ssh_config() {
     );
 }
 
+#[test]
+fn parses_bracketed_remote_forward_endpoints_from_openssh() {
+    let config = concat!(
+        "user deploy\nhostname server.internal\nport 2200\n",
+        "remoteforward [127.0.0.1]:9000 [localhost]:3000\n",
+        "remoteforward 9001 [127.0.0.1]:3001\n",
+        "remoteforward [localhost]:9002 localhost:3002\n",
+    );
+    let destination = parse_resolved_config("fixture", config)
+        .expect("resolved OpenSSH RemoteForward output must not fall back to raw config");
+    assert_eq!(
+        destination.remote_forwards,
+        vec![
+            super::RemoteForwardSpec { remote_port: 9000, local_port: 3000 },
+            super::RemoteForwardSpec { remote_port: 9001, local_port: 3001 },
+            super::RemoteForwardSpec { remote_port: 9002, local_port: 3002 },
+        ]
+    );
+}
+
+#[test]
+fn remote_forward_rejects_invalid_brackets_and_unsupported_endpoints() {
+    for (remote, local) in [
+        ("[127.0.0.1:9000", "localhost:3000"),
+        ("127.0.0.1]:9000", "localhost:3000"),
+        ("[[localhost]]:9000", "localhost:3000"),
+        ("9000", "[localhost:3000"),
+        ("9000", "localhost]:3000"),
+        ("9000", "[[127.0.0.1]]:3000"),
+        ("[0.0.0.0]:9000", "localhost:3000"),
+        ("9000", "[example.invalid]:3000"),
+        ("[::1]:9000", "localhost:3000"),
+        ("9000", "[::1]:3000"),
+        ("/tmp/forward.sock", "localhost:3000"),
+        ("9000", "/tmp/forward.sock"),
+        ("[localhost]:0", "localhost:3000"),
+        ("9000", "[localhost]:65536"),
+    ] {
+        let values = [remote.to_owned(), local.to_owned()];
+        assert!(super::parse_remote_forward(&values).is_none(), "{remote} -> {local}");
+    }
+}
+
+#[test]
+fn system_openssh_expands_remote_forwards_from_included_config() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("config");
+    let included = directory.path().join("forward.conf");
+    std::fs::write(
+        &config,
+        format!("Include \"{}\"\n", included.to_string_lossy().replace('\\', "/")),
+    )
+    .unwrap();
+    std::fs::write(
+        &included,
+        "Host forward-fixture\n HostName example.invalid\n User fixture\n RemoteForward 127.0.0.1:9000 localhost:3000\n RemoteForward 9001 127.0.0.1:3001\n",
+    )
+    .unwrap();
+    let output = match super::ssh_config_command("forward-fixture", Some(&config)).output() {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // The pure output fixtures remain mandatory when OpenSSH is not installed.
+            eprintln!("skipping offline OpenSSH integration test: SSH executable not installed");
+            return;
+        },
+        Err(error) => panic!("offline OpenSSH probe failed: {error}"),
+    };
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let destination =
+        parse_resolved_config("forward-fixture", &String::from_utf8_lossy(&output.stdout))
+            .expect("real ssh -G output must retain configured remote forwards");
+    assert_eq!(
+        destination.remote_forwards,
+        vec![
+            super::RemoteForwardSpec { remote_port: 9000, local_port: 3000 },
+            super::RemoteForwardSpec { remote_port: 9001, local_port: 3001 },
+        ]
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn system_openssh_expands_alias_and_windows_identity_from_the_selected_file() {
