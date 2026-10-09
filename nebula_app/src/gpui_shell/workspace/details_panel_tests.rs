@@ -24,7 +24,6 @@ fn open(
                 crate::runtime_api::RuntimeHub::new(),
                 windowing::WorkspaceStartup::Empty,
                 windowing::WindowRole::Regular,
-                None,
                 cx,
             )
         });
@@ -48,6 +47,56 @@ fn width_limits_keep_room_for_the_document_without_losing_preference() {
     assert_eq!(panel_width(-1.0, 1400.0), MIN_WIDTH);
     assert_eq!(panel_width(500.0, 400.0), 184.0);
     assert_eq!(panel_width(500.0, 1400.0), 500.0);
+}
+
+#[gpui::test]
+fn disabling_interface_motion_settles_a_closing_details_panel(cx: &mut TestAppContext) {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("motion.md");
+    std::fs::write(&path, "# Heading\n\nBody").unwrap();
+    let (workspace, mut cx) = open(path, cx);
+    cx.update(|_, cx| {
+        let mut settings =
+            crate::gpui_shell::config::Settings::load(nebula_settings::ThemeName::Nord);
+        settings.animations = true;
+        settings.tab_reveal = nebula_settings::TabRevealName::Slide;
+        cx.set_global(settings);
+        cx.set_reduce_motion(false);
+    });
+    workspace.update(&mut cx, |view, cx| {
+        view.toggle_side_panel(view.side_panel.view, cx);
+        assert!(!view.side_panel.open);
+        assert!(view.side_panel_anim_armed);
+    });
+    cx.update(|window, cx| {
+        cx.global_mut::<crate::gpui_shell::config::Settings>().animations = false;
+        window.draw(cx).clear(cx);
+    });
+    assert!(cx.debug_bounds("workspace-details-slot").is_none());
+    workspace.read_with(&cx, |view, _| assert!(!view.side_panel_anim_armed));
+}
+
+#[gpui::test]
+fn interface_motion_keyboard_panel_close_is_instant(cx: &mut TestAppContext) {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("keyboard-motion.md");
+    std::fs::write(&path, "# Heading\n\nBody").unwrap();
+    let (workspace, mut cx) = open(path, cx);
+    cx.update(|_, cx| {
+        let mut settings =
+            crate::gpui_shell::config::Settings::load(nebula_settings::ThemeName::Nord);
+        settings.animations = true;
+        settings.tab_reveal = nebula_settings::TabRevealName::Slide;
+        cx.set_global(settings);
+        cx.set_reduce_motion(false);
+    });
+    cx.simulate_keystrokes("tab");
+    cx.update(|window, cx| {
+        assert!(window.last_input_was_keyboard());
+        workspace.update(cx, |view, cx| view.toggle_side_panel(view.side_panel.view, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(cx.debug_bounds("workspace-details-slot").is_none());
 }
 
 #[gpui::test]

@@ -203,9 +203,7 @@ impl NebulaWorkspace {
         // 安装包提供的 Maple。字号由独立的界面字号设置控制。
         let settings = cx.try_global::<crate::gpui_shell::config::Settings>();
         let tab_close_visible = settings.map(|settings| settings.tab_close_visible).unwrap_or(true);
-        let tab_reveal = settings
-            .map(|settings| settings.tab_reveal)
-            .unwrap_or(nebula_settings::TabRevealName::Slide);
+        let instant_motion = tab_reveal_instant(cx) || window.last_input_was_keyboard();
         let chrome_family = theme.mono_font_family.clone();
         let symbol_family: SharedString = crate::font_install::REQUIRED_FONT_FAMILY.into();
         // 界面字号独立于终端缩放。
@@ -600,7 +598,7 @@ impl NebulaWorkspace {
                     // 让位滑动：进位方向 ease-out 滑入（旧壳是双向弹簧；回位
                     // 这里先直落，违和再补逐帧插值）。设置「标签动画=立即」时
                     // 直接落位（旧壳 TabRevealMotion::Instant 的 Snap 语义）。
-                    if tab_reveal == nebula_settings::TabRevealName::Instant {
+                    if instant_motion {
                         row.top(px(shift)).into_any_element()
                     } else {
                         row.with_animation(
@@ -764,7 +762,7 @@ impl NebulaWorkspace {
                             ),
                     ),
             )
-            .child(self.render_tabs_section(items, cx));
+            .child(self.render_tabs_section(items, instant_motion, cx));
         self.spinner_visible.set(items_running.get());
         if items_running.get() {
             self.arm_activity_spinner_frame(window, cx);
@@ -799,7 +797,12 @@ impl NebulaWorkspace {
     /// Tab 列表槽位。展开时列表是侧栏 `v_flex` 的 `flex_1` 子项，视口等于
     /// 面板剩余高度（旧壳 `tabs_avail`）。折叠动画只按**上次量到的剩余
     /// 高度**卷帘，绝不按全部行高，也不把裁剪高度写回窗口。
-    fn render_tabs_section<I>(&self, items: I, cx: &mut Context<Self>) -> gpui::AnyElement
+    fn render_tabs_section<I>(
+        &self,
+        items: I,
+        instant: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement
     where
         I: IntoIterator,
         I::Item: IntoElement,
@@ -810,7 +813,7 @@ impl NebulaWorkspace {
         if collapsed && !self.tabs_fold_frozen {
             return div().into_any_element();
         }
-        if !self.tabs_fold_armed || !self.tabs_fold_frozen {
+        if instant || !self.tabs_fold_armed || !self.tabs_fold_frozen {
             return if collapsed { div().into_any_element() } else { list };
         }
         let slot_h = self.tabs_viewport_h;
@@ -837,12 +840,18 @@ impl NebulaWorkspace {
     /// 终端卡随 flex 布局自然滑移收编空间（对齐旧壳"卡骑在折叠动画上"
     /// 的观感）。动画按方向换 key 重启，端点随运行时设置变化。
     pub(super) fn render_sidebar_slot(
-        &self,
+        &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let collapsed = self.sidebar_collapsed;
-        if tab_reveal_instant(cx) || !self.sidebar_fold_armed {
+        let instant = tab_reveal_instant(cx) || window.last_input_was_keyboard();
+        if instant {
+            self.sidebar_fold_armed = false;
+            self.tabs_fold_armed = false;
+            self.tabs_fold_frozen = false;
+        }
+        if instant || !self.sidebar_fold_armed {
             return if collapsed {
                 div().into_any_element()
             } else {

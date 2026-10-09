@@ -9,6 +9,7 @@ use std::{cell::Cell, rc::Rc};
 #[derive(Default)]
 pub(super) struct PortFocus {
     focused: bool,
+    instant: bool,
     generation: usize,
     from: f32,
     position: Rc<Cell<f32>>,
@@ -32,7 +33,11 @@ impl PortFocus {
             .bottom_0()
             .h(px(1.0))
             .bg(cx.theme().link);
-        if self.from == target || cx.reduce_motion() {
+        if self.from == target
+            || self.position.get() == target
+            || self.instant
+            || !crate::gpui_shell::config::animations_enabled(cx)
+        {
             self.position.set(target);
             return line
                 .left(relative((1.0 - target) * 0.5))
@@ -124,6 +129,8 @@ impl SettingsPane {
         cx: &mut Context<Self>,
     ) -> gpui::Div {
         self.mobile_initialize(window, cx);
+        self.mobile.port_focus.instant =
+            !crate::gpui_shell::motion::pointer_motion_enabled(window, cx);
         self.mobile_sync_port_placeholder(window, cx);
         // GPUI 焦点通知在 draw 末尾派发；首帧直接读取焦点事实，避免底线晚一帧展开。
         self.mobile
@@ -820,6 +827,7 @@ impl SettingsPane {
             Button::new("mobile-configure-relay")
                 .debug_selector(|| "mobile-configure-relay".into())
                 .map(|button| crate::gpui_shell::widgets::settings_button(button, true, cx))
+                .min_w(px(48.0))
                 .label(language.text(if preferences.relay_enabled {
                     Message::MobileManageRelay
                 } else {
@@ -865,6 +873,7 @@ impl SettingsPane {
                 Button::new("mobile-pause")
                     .debug_selector(|| "mobile-pause".into())
                     .map(|button| crate::gpui_shell::widgets::settings_button(button, true, cx))
+                    .min_w(px(48.0))
                     .label(language.text(Message::MobilePause))
                     .disabled(self.mobile.operation)
                     .on_click(cx.listener(|this, _, window, cx| this.mobile_pause(window, cx))),

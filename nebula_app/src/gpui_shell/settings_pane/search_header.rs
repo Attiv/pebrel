@@ -23,7 +23,7 @@ impl SearchFocus {
     fn underline(&self, color: Hsla, reduce_motion: bool) -> gpui::AnyElement {
         let target = if self.focused { 1.0 } else { 0.0 };
         let line = div().absolute().bottom_0().h(px(1.0)).bg(color);
-        if self.from == target || reduce_motion {
+        if self.from == target || self.progress.get() == target || reduce_motion {
             self.progress.set(target);
             return line
                 .left(relative((1.0 - target) * 0.5))
@@ -72,7 +72,7 @@ impl SettingsPane {
 
     pub(super) fn render_nav_search(
         &self,
-        _window: &Window,
+        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let language = crate::gpui_shell::config::ui_language(cx);
@@ -112,7 +112,10 @@ impl SettingsPane {
                     .h(px(1.0))
                     .bg(crate::gpui_shell::theme::settings_hairline(cx)),
             )
-            .child(self.settings_search_focus.underline(cx.theme().link, cx.reduce_motion()))
+            .child(self.settings_search_focus.underline(
+                cx.theme().link,
+                !crate::gpui_shell::motion::pointer_motion_enabled(window, cx),
+            ))
             .into_any_element()
     }
 }

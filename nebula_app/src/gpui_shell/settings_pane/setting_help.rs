@@ -124,8 +124,8 @@ pub(super) fn help(key: &str, language: UiLanguage) -> SettingHelp {
             None,
         ),
         "animations" => (
-            language.pick("为低频面板和状态切换添加轻量过渡。", "Adds lightweight transitions to occasional panels and state changes."),
-            Some(language.pick("关闭后立即切换；系统的减少动态效果设置始终优先。", "When disabled, changes are instant. The system reduced-motion preference always takes priority.")),
+            language.text(crate::i18n::Message::SettingsAnimationsDescription),
+            Some(language.text(crate::i18n::Message::SettingsAnimationsDetails)),
         ),
         "cjk_bold_regular" => (
             language.pick("用提亮代替加粗，让密集笔画更清楚。", "Brightens dense glyphs instead of thickening their strokes."),

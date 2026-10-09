@@ -118,7 +118,9 @@ fn failed_network_change_restores_the_committed_interface(cx: &mut gpui::TestApp
 fn mobile_three_states_and_manual_copy_use_the_rendered_controls(cx: &mut gpui::TestAppContext) {
     cx.update(|cx| {
         gpui_component::init(cx);
-        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+        let mut settings = crate::gpui_shell::config::Settings::load(ThemeName::Nord);
+        settings.ui_language = crate::display::UiLanguage::ZhCn;
+        cx.set_global(settings);
     });
     let mut owner = None;
     let (_, cx) = cx.add_window_view(|window, cx| {
@@ -307,7 +309,7 @@ fn mobile_three_states_and_manual_copy_use_the_rendered_controls(cx: &mut gpui::
         let bounds = cx.debug_bounds(selector).unwrap();
         let height = cx.update(|_, cx| settings_control_height(cx));
         assert_eq!(bounds.size.height, height, "mobile actions share backup button geometry");
-        assert!(bounds.size.width >= px(48.0));
+        assert!(bounds.size.width >= px(48.0), "{selector}: {bounds:?}");
     }
     for selector in [
         "mobile-device-row",

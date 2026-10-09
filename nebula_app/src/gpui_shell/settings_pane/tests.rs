@@ -26,10 +26,66 @@ fn animation_effects_switch_is_visible_in_appearance_and_persists(cx: &mut gpui:
     });
     let bounds = cx.debug_bounds("nebula-switch-animations").expect("animation effects switch");
     assert!(bounds.size.width > px(0.0) && bounds.size.height > px(0.0));
+    let viewport = cx.update(|window, _| window.viewport_size());
+    let position = gpui::point(viewport.width / 2.0, viewport.height / 2.0);
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position,
+        delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), position.y - bounds.center().y)),
+        touch_phase: gpui::TouchPhase::Moved,
+        modifiers: Default::default(),
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let bounds = cx.debug_bounds("nebula-switch-animations").unwrap();
+    assert!(bounds.top() > px(0.0) && bounds.bottom() < viewport.height, "{bounds:?}");
     cx.simulate_click(bounds.center(), gpui::Modifiers::default());
     cx.run_until_parked();
-    assert!(!pane.read_with(cx, |pane, _| pane.runtime.animations));
+    assert!(
+        !pane.read_with(cx, |pane, _| pane.runtime.animations),
+        "animation switch click at {bounds:?} must toggle the saved preference",
+    );
     assert!(!RuntimeSettings::load().animations);
+    assert!(!pane.read_with(cx, |_, cx| crate::gpui_shell::config::animations_enabled(cx)));
+}
+
+#[cfg(feature = "gpui-test-support")]
+#[gpui::test]
+fn interface_motion_mouse_navigation_fades_but_keyboard_search_stays_instant(
+    cx: &mut gpui::TestAppContext,
+) {
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        let mut settings = crate::gpui_shell::config::Settings::load(ThemeName::Nord);
+        settings.animations = false;
+        cx.set_global(settings);
+    });
+    let mut pane_out = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let pane = cx.new(|cx| SettingsPane::new(window, cx));
+        pane_out = Some(pane.clone());
+        gpui_component::Root::new(pane, window, cx)
+    });
+    let pane = pane_out.unwrap();
+    cx.simulate_resize(gpui::size(px(1280.0), px(1000.0)));
+    cx.update(|window, cx| {
+        window.draw(cx).clear(cx);
+        cx.global_mut::<crate::gpui_shell::config::Settings>().animations = true;
+    });
+    let nav = cx.debug_bounds("settings-nav-6").unwrap();
+    cx.simulate_click(nav.center(), gpui::Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(pane.read_with(cx, |pane, _| pane.section_fade.is_active()));
+    assert_eq!(pane.read_with(cx, |pane, _| pane.active_section), 6);
+    cx.update(|window, cx| {
+        pane.read(cx).settings_search_input.clone().update(cx, |input, cx| input.focus(window, cx));
+    });
+    cx.simulate_keystrokes("n");
+    cx.simulate_input("etwork");
+    cx.update(|window, cx| {
+        assert!(window.last_input_was_keyboard());
+        window.draw(cx).clear(cx);
+    });
+    assert_eq!(pane.read_with(cx, |pane, _| pane.active_section), 5);
+    assert!(!pane.read_with(cx, |pane, _| pane.section_fade.is_active()));
 }
 
 #[cfg(feature = "gpui-test-support")]

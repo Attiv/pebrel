@@ -16,11 +16,11 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, Hsla, InteractiveElement as _, IntoElement, KeyDownEvent, ModifiersChangedEvent,
-    MouseButton, MouseMoveEvent, ParentElement as _, Render, RenderImage, Rgba as GpuiRgba,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window,
-    anchored, deferred, div, ease_out_quint, img, px,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement as _, IntoElement, KeyDownEvent, ModifiersChangedEvent, MouseButton,
+    MouseMoveEvent, ParentElement as _, Render, RenderImage, Rgba as GpuiRgba, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, anchored, deferred,
+    div, img, px,
 };
 use gpui_component::input::InputEvent;
 use gpui_component::select::{SelectEvent, SelectItem};
@@ -111,6 +111,7 @@ pub struct SettingsPane {
     launch_at_login: bool,
     /// 当前分区（`SECTIONS` 下标）；默认落在应用主页。
     active_section: usize,
+    section_fade: super::motion::ContentFade,
     agents: agents::AgentSettingsState,
     mobile: mobile::MobileState,
     appearance_picker: Option<appearance_picker::AppearancePicker>,
@@ -1565,6 +1566,7 @@ impl SettingsPane {
             nav = nav.child(
                 div()
                     .id(("settings-nav", ix))
+                    .debug_selector(move || format!("settings-nav-{ix}"))
                     .px(px(10.0))
                     .ml_1()
                     .mr_1()
@@ -1629,19 +1631,7 @@ impl Render for SettingsPane {
         crate::gpui_shell::theme::sync_component_focus_ring(window, cx);
         let nav = self.render_nav(window, cx);
         let content = self.section_content(window, cx);
-        let content = if crate::gpui_shell::config::animations_enabled(cx) {
-            div()
-                .w_full()
-                .child(content)
-                .with_animation(
-                    ("settings-section-enter", self.active_section),
-                    Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
-                    |content, t| content.opacity(t),
-                )
-                .into_any_element()
-        } else {
-            content
-        };
+        let content_opacity = self.section_fade.opacity(self.active_section, window, cx);
         // 这里**不再**挂 font_family。旧壳设置页整页走终端 mono，是因为自绘
         // 只有一套字形缓存；GPUI 壳没有这个限制，继承那个观感只会让中文说明
         // 字距发虚、行更长。根字体由 `theme.font_family`（Windows 上是雅黑
@@ -1762,7 +1752,10 @@ impl Render for SettingsPane {
                                     .justify_center()
                                     .child(
                                         v_flex()
+                                            .id("settings-section-content")
+                                            .debug_selector(|| "settings-section-content".into())
                                             .w_full()
+                                            .opacity(content_opacity)
                                             .when(matches!(self.active_section, 4 | 9 | 10 | MOBILE_SECTION), |content| {
                                                 content.items_center()
                                             })

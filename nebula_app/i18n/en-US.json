@@ -17,6 +17,11 @@
     "en_us": "English"
   },
   "settings": {
+    "animations": {
+      "title": "Animation effects",
+      "description": "Lightweight feedback for mouse-driven settings and occasional panels.",
+      "details": "Changes apply immediately to open windows. Disable for instant transitions; keyboard actions stay instant. System reduced motion limits movement. Background playback has separate controls."
+    },
     "completion": {
       "mode": "Completion mode",
       "cycle": "Cycle completion mode",

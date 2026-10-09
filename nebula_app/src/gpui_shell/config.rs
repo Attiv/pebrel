@@ -128,13 +128,16 @@ pub(crate) fn panel_resize(cx: &App) -> bool {
 
 /// 动画总门禁：用户偏好与系统 reduced motion 任一关闭，都立即切换。
 pub(crate) fn animations_enabled(cx: &App) -> bool {
-    !cx.reduce_motion() && cx.try_global::<Settings>().is_none_or(|settings| settings.animations)
+    !crate::gpui_shell::motion::system_reduced_motion(cx)
+        && cx.try_global::<Settings>().is_none_or(|settings| settings.animations)
 }
 
 /// 只查询内存快照，避免动画渲染读盘；初始化前保持默认滑动行为。
 pub(crate) fn tab_reveal_instant(cx: &App) -> bool {
-    cx.try_global::<Settings>()
-        .is_some_and(|settings| settings.tab_reveal == nebula_settings::TabRevealName::Instant)
+    !animations_enabled(cx)
+        || cx
+            .try_global::<Settings>()
+            .is_some_and(|settings| settings.tab_reveal == nebula_settings::TabRevealName::Instant)
 }
 
 pub(crate) fn ctrl_wheel_font_zoom(cx: &App) -> bool {
@@ -854,6 +857,25 @@ fn build_palette(raw: &RawColors) -> Palette {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "gpui-test-support")]
+    #[gpui::test]
+    fn interface_motion_switch_and_system_preference_gate_workspace_transitions(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        cx.update(|cx| {
+            let mut settings = super::Settings::load(nebula_settings::ThemeName::Nord);
+            settings.tab_reveal = nebula_settings::TabRevealName::Slide;
+            cx.set_global(settings);
+            for (enabled, reduced, instant) in
+                [(true, false, false), (false, false, true), (true, true, true)]
+            {
+                cx.global_mut::<super::Settings>().animations = enabled;
+                cx.set_reduce_motion(reduced);
+                assert_eq!(super::tab_reveal_instant(cx), instant);
+            }
+        });
+    }
+
     use super::{
         RawColors, Settings, StartupWindow, apply_resolved_theme, apply_theme, build_palette,
         effective_font_sizes, effective_theme_line_height, resolve_ui_language, rgba8,

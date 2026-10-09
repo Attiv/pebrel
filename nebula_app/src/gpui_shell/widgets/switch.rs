@@ -62,7 +62,8 @@ impl RenderOnce for NebulaSwitch {
                 epoch: 0,
             },
         );
-        let reduced = !crate::gpui_shell::config::animations_enabled(cx) || self.disabled;
+        let reduced =
+            !crate::gpui_shell::motion::pointer_motion_enabled(window, cx) || self.disabled;
         let (from, position, epoch) = state.update(cx, |motion, _| {
             if motion.target != target {
                 motion.from = motion.position.get();
@@ -94,15 +95,29 @@ impl RenderOnce for NebulaSwitch {
                 })
             });
         let paint = move |track: gpui::Div, t: f32| {
-            track.bg(primary.opacity(t)).border_color(border.blend(primary.opacity(t))).child(
-                div()
-                    .absolute()
-                    .left(px(4.0 + 16.0 * t))
-                    .top(px(4.0 - 2.0 * t))
-                    .size(px(12.0 + 4.0 * t))
-                    .rounded_full()
-                    .bg(muted.blend(white.opacity(t))),
-            )
+            track
+                .bg(primary.opacity(t))
+                .border_color(border.blend(primary.opacity(t)))
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(4.0))
+                        .top(px(4.0))
+                        .size(px(12.0))
+                        .rounded_full()
+                        .bg(muted)
+                        .opacity(1.0 - t),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(20.0))
+                        .top(px(2.0))
+                        .size(px(16.0))
+                        .rounded_full()
+                        .bg(white)
+                        .opacity(t),
+                )
         };
         let track = if from == target {
             paint(track, target).into_any_element()
@@ -110,8 +125,8 @@ impl RenderOnce for NebulaSwitch {
             track
                 .with_animation(
                     ElementId::NamedInteger(format!("switch-slide-{}", self.key).into(), epoch),
-                    Animation::new(Duration::from_millis(280))
-                        .with_easing(|t| crate::motion::Easing::CssStandard.sample(t)),
+                    Animation::new(Duration::from_millis(160))
+                        .with_easing(|t| crate::motion::Easing::UiEaseOut.sample(t)),
                     move |track, t| {
                         let current = from + (target - from) * t;
                         position.set(current);

@@ -81,6 +81,8 @@ pub enum Easing {
     EaseInOutCubic,
     /// CSS `ease`: `cubic-bezier(0.25, 0.1, 0.25, 1)`.
     CssEase,
+    /// Strong UI entrance curve: `cubic-bezier(0.23, 1, 0.32, 1)`.
+    UiEaseOut,
     /// Material/CSS standard curve: `cubic-bezier(0.4, 0, 0.2, 1)`.
     CssStandard,
     /// The local toggle reference's elastic travel curve:
@@ -138,6 +140,7 @@ impl Easing {
             Self::EaseInOutCubic if t < 0.5 => 4.0 * t * t * t,
             Self::EaseInOutCubic => 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0,
             Self::CssEase => cubic_bezier(0.25, 0.1, 0.25, 1.0, t),
+            Self::UiEaseOut => cubic_bezier(0.23, 1.0, 0.32, 1.0, t),
             Self::CssStandard => cubic_bezier(0.4, 0.0, 0.2, 1.0, t),
             Self::LiquidToggle => cubic_bezier(0.68, -0.6, 0.32, 1.6, t),
             Self::SwiftOut => 1.0 - (1.0 - t).powi(3),

@@ -100,24 +100,26 @@ impl RenderOnce for SettingsSegments {
                 blur_radius: px(3.0),
                 ..crate::gpui_shell::theme::card_shadow(cx)
             }]);
-        let indicator = if from == target || cx.reduce_motion() {
-            position.set(target);
-            indicator.into_any_element()
-        } else {
-            indicator
-                .with_animation(
-                    ElementId::NamedInteger(format!("settings-slide-{key}").into(), epoch),
-                    Animation::new(SLIDE_DURATION).with_easing(|progress| {
-                        crate::motion::Easing::CssStandard.sample(progress)
-                    }),
-                    move |indicator, progress| {
-                        let current = from + (target - from) * progress;
-                        position.set(current);
-                        indicator.left(relative(current))
-                    },
-                )
-                .into_any_element()
-        };
+        let indicator =
+            if from == target || !crate::gpui_shell::motion::pointer_motion_enabled(window, cx) {
+                motion.update(cx, |motion, _| motion.from = target);
+                position.set(target);
+                indicator.into_any_element()
+            } else {
+                indicator
+                    .with_animation(
+                        ElementId::NamedInteger(format!("settings-slide-{key}").into(), epoch),
+                        Animation::new(SLIDE_DURATION).with_easing(|progress| {
+                            crate::motion::Easing::CssStandard.sample(progress)
+                        }),
+                        move |indicator, progress| {
+                            let current = from + (target - from) * progress;
+                            position.set(current);
+                            indicator.left(relative(current))
+                        },
+                    )
+                    .into_any_element()
+            };
         div()
             .id(SharedString::from(format!("settings-choices-{key}")))
             .debug_selector(move || format!("settings-choices-{key}"))

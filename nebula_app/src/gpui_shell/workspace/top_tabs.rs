@@ -144,9 +144,7 @@ impl NebulaWorkspace {
         let dark = theme.is_dark();
         let settings = cx.try_global::<crate::gpui_shell::config::Settings>();
         let tab_close_visible = settings.map(|settings| settings.tab_close_visible).unwrap_or(true);
-        let tab_reveal = settings
-            .map(|settings| settings.tab_reveal)
-            .unwrap_or(nebula_settings::TabRevealName::Slide);
+        let instant_motion = super::tab_reveal_instant(cx) || window.last_input_was_keyboard();
         let chrome_family = theme.mono_font_family.clone();
         let symbol_family: SharedString = crate::font_install::REQUIRED_FONT_FAMILY.into();
         let label_px = settings.map(|settings| settings.ui_font_size_px).unwrap_or(15.0);
@@ -527,7 +525,7 @@ impl NebulaWorkspace {
                     )
                     .into_any_element()
                 } else if shift != 0.0 {
-                    if tab_reveal == nebula_settings::TabRevealName::Instant {
+                    if instant_motion {
                         row.left(px(shift)).into_any_element()
                     } else {
                         row.with_animation(

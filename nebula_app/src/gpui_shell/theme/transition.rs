@@ -40,7 +40,7 @@ impl ThemeTransition {
     pub(crate) fn render(&mut self, window: &mut Window, cx: &App) -> Option<AnyElement> {
         let light = super::resolved_skin(cx).is_light;
         let changed = self.light.replace(light).is_some_and(|previous| previous != light);
-        if cx.reduce_motion()
+        if !crate::gpui_shell::motion::pointer_motion_enabled(window, cx)
             || !window.is_window_active()
             || !crate::platform::window_capture::supported()
         {

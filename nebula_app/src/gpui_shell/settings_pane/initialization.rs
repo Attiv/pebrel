@@ -625,6 +625,7 @@ impl SettingsPane {
             runtime,
             launch_at_login: crate::platform::startup::launch_at_login(),
             active_section: 1,
+            section_fade: super::super::motion::ContentFade::default(),
             agents: agents::AgentSettingsState::new(cx),
             mobile: mobile::MobileState::new(window, cx),
             appearance_picker: None,

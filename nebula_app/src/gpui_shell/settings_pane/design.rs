@@ -4,9 +4,7 @@
 //! 垂直居中。标准密度沿用原紧凑间距，紧凑档只再微收；字号、命中区域和窗口
 //! 标题栏不随内容密度缩小。分组通过留白表达，不添加标题下横线。
 
-use std::time::Duration;
-
-use gpui::{Animation, AnimationExt as _, ElementId, FontWeight, ease_out_quint, relative};
+use gpui::FontWeight;
 
 use super::*;
 
@@ -31,8 +29,6 @@ pub(super) const RAIL_INDENT: f32 = 13.0;
 /// 控件列宽。够放下最宽的下拉（220）加一点余量；开关这类窄控件在列内右对齐，
 /// 右缘与下拉保持一致。文字列允许收缩换行，避免窄窗口被旧的 320px 下限撑宽。
 const CTRL_COL_W: f32 = 232.0;
-/// 脏值段升起的时长。
-const MARK_RISE: Duration = Duration::from_millis(260);
 
 #[derive(Clone, Copy)]
 pub(super) enum RowLayout {
@@ -326,12 +322,9 @@ impl SettingsPane {
                         .left_0()
                         .bottom_0()
                         .w(px(RAIL_W))
+                        .h_full()
                         .bg(crate::gpui_shell::theme::settings_mark(cx))
-                        .with_animation(
-                            ElementId::Name(format!("settings-mark-{label}").into()),
-                            Animation::new(MARK_RISE).with_easing(ease_out_quint()),
-                            |mark, t| mark.h(relative(t)),
-                        ),
+                        ,
                 )
             })
             .child(columns)

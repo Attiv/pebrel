@@ -26,6 +26,7 @@ pub(super) struct DetailsPanelState {
     tab: Option<u8>,
     previous_tab: Option<u8>,
     transition: u64,
+    content_fade: crate::gpui_shell::motion::ContentFade,
 }
 
 impl Default for DetailsPanelState {
@@ -39,6 +40,7 @@ impl Default for DetailsPanelState {
             tab: None,
             previous_tab: None,
             transition: 0,
+            content_fade: Default::default(),
         }
     }
 }
@@ -232,6 +234,7 @@ impl NebulaWorkspace {
         let previous = self.details_panel.previous_tab;
         let serial = self.details_panel.transition;
         let background = cx.theme().secondary;
+        let instant = tab_reveal_instant(cx) || window.last_input_was_keyboard();
         let mut header = h_flex()
             .id("workspace-details-header")
             .debug_selector(|| "workspace-details-header".to_owned())
@@ -255,16 +258,22 @@ impl NebulaWorkspace {
                 .flex_shrink_0()
                 .overflow_hidden()
                 .text_size(px(13.0))
-                .child(div().w(px(extra)).pr(px(8.0)).truncate().child(label))
-                .with_animation(
-                    (id, serial),
-                    Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
-                    move |label, t| {
-                        label
-                            .w(px(extra * (from + (to - from) * t)))
-                            .opacity(from + (to - from) * t)
-                    },
-                );
+                .child(div().w(px(extra)).pr(px(8.0)).truncate().child(label));
+            let label = if instant {
+                label.w(px(extra * to)).opacity(to).into_any_element()
+            } else {
+                label
+                    .with_animation(
+                        (id, serial),
+                        Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
+                        move |label, t| {
+                            label
+                                .w(px(extra * (from + (to - from) * t)))
+                                .opacity(from + (to - from) * t)
+                        },
+                    )
+                    .into_any_element()
+            };
             let button = Button::new(id)
                 .ghost()
                 .h(px(HEADER_CONTROL_SIZE))
@@ -306,17 +315,26 @@ impl NebulaWorkspace {
                             );
                         },
                     }
-                }))
-                .with_animation(
-                    (id, serial),
-                    Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
-                    move |button, t| {
-                        let progress = from + (to - from) * t;
-                        button
-                            .w(px(HEADER_CONTROL_SIZE + extra * progress))
-                            .bg(background.opacity(progress))
-                    },
-                );
+                }));
+            let button = if instant {
+                button
+                    .w(px(HEADER_CONTROL_SIZE + extra * to))
+                    .bg(background.opacity(to))
+                    .into_any_element()
+            } else {
+                button
+                    .with_animation(
+                        (id, serial),
+                        Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
+                        move |button, t| {
+                            let progress = from + (to - from) * t;
+                            button
+                                .w(px(HEADER_CONTROL_SIZE + extra * progress))
+                                .bg(background.opacity(progress))
+                        },
+                    )
+                    .into_any_element()
+            };
             header = header.child(button);
         }
         header
@@ -341,7 +359,7 @@ impl NebulaWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
-        let instant = tab_reveal_instant(cx);
+        let instant = tab_reveal_instant(cx) || window.last_input_was_keyboard();
         if instant {
             // 切换偏好时面板可能已经关闭，旧动画标志不得保留布局占位。
             self.side_panel_anim_armed = false;
@@ -354,6 +372,9 @@ impl NebulaWorkspace {
             self.details_panel.previous_tab = self.details_panel.tab;
             self.details_panel.tab = Some(active);
             self.details_panel.transition = self.details_panel.transition.wrapping_add(1);
+        }
+        if instant {
+            self.details_panel.previous_tab = Some(active);
         }
         let open = self.side_panel.open;
         if open {
@@ -377,17 +398,23 @@ impl NebulaWorkspace {
                 PanelView::Git => self.render_git_tree(window, cx),
             }
         };
+        let content_opacity =
+            self.details_panel.content_fade.opacity(usize::from(active), window, cx);
         let band = v_flex()
             .relative()
             .w(px(width))
             .h_full()
             .pb(px(crate::gpui_shell::theme::PaneCardStyle::current(cx).margin.bottom))
             .child(self.render_details_header(width, window, cx))
-            .child(div().flex_1().min_h_0().w_full().child(panel).with_animation(
-                ("details-content", self.details_panel.transition),
-                Animation::new(Duration::from_millis(140)).with_easing(ease_out_quint()),
-                |content, t| content.opacity(t),
-            ));
+            .child(
+                div()
+                    .id("details-content")
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .opacity(content_opacity)
+                    .child(panel),
+            );
         // Instant: both 240 ms translations are dropped and the band rests at
         // its final width, so the panel appears in place instead of sliding.
         let band: gpui::AnyElement = if instant {

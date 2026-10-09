@@ -87,7 +87,7 @@ impl SettingsPane {
             .child(self.font_size_row(true, cx))
             .child(self.switch_row(
                 "animations",
-                language.pick("动画效果", "Animation effects"),
+                language.text(crate::i18n::Message::SettingsAnimationsTitle),
                 help("animations", language),
                 self.runtime.animations,
                 cx,

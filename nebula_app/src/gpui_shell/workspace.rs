@@ -864,6 +864,7 @@ impl NebulaWorkspace {
         let runtime = nebula_settings::RuntimeSettings::load();
         let sidebar_width = runtime.sidebar_width;
         windowing::observe_window_bounds(runtime_window_id, window, cx);
+        crate::gpui_shell::motion::observe_system_preferences(window, cx);
         let initial_grid = windowing::prepare_initial_grid(
             window,
             cx,

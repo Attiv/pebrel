@@ -49,6 +49,8 @@ pub(crate) mod ssh_agent;
 pub mod startup;
 #[cfg(unix)]
 pub(crate) mod tray_native;
+#[cfg(feature = "gpui-shell")]
+pub(crate) mod ui_motion;
 pub(crate) mod update_installation;
 #[cfg(feature = "gpui-shell")]
 pub(crate) mod window_capture;
