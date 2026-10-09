@@ -373,7 +373,11 @@ mod dispatch {
     fn clearing_custom_reopen_preserves_real_document_undo_and_redo(cx: &mut TestAppContext) {
         let _settings_lock = crate::gpui_shell::settings_fixture::lock_theme_studio();
         let (_directory, workspace, mut cx) = open_workspace(1, cx);
-        let modifier = if crate::platform::Platform::current() == crate::platform::Platform::MacOS { "cmd" } else { "ctrl" };
+        let modifier = if crate::platform::Platform::current() == crate::platform::Platform::MacOS {
+            "cmd"
+        } else {
+            "ctrl"
+        };
         press(&format!("{modifier}-/"), &mut cx);
         press(&format!("{modifier}-a"), &mut cx);
         cx.simulate_input("Changed");

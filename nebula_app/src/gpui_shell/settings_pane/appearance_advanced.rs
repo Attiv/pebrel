@@ -131,70 +131,70 @@ impl SettingsPane {
                 help("blur", language),
                 cx,
             ));
-        let terminal = self
-            .group(language.pick("终端外观", "Terminal appearance"), cx)
-            .child(self.switch_row(
-                "terminal_label_badges",
-                language.text(crate::i18n::Message::SettingsAppearanceTerminalLabelBadges),
-                language.text(
-                    crate::i18n::Message::SettingsAppearanceTerminalLabelBadgesDescription,
-                ),
-                self.runtime.terminal_label_badges,
-                cx,
-            ))
-            .child(self.row(
-                language.text(crate::i18n::Message::SettingsFontEnglish),
-                help("font_family", language),
-                font_picker,
-                cx,
-            ))
-            .child(self.row(
-                language.text(crate::i18n::Message::SettingsFontChinese),
-                language.text(crate::i18n::Message::SettingsFontChineseDescription),
-                cjk_font_picker,
-                cx,
-            ))
-            .child(self.font_size_row(false, cx))
-            .child(self.switch_row(
-                "ctrl_wheel_font_zoom",
-                language.text(crate::i18n::Message::SettingsFontCtrlWheelZoom),
-                language.text(crate::i18n::Message::SettingsFontCtrlWheelZoomDescription),
-                self.runtime.ctrl_wheel_font_zoom,
-                cx,
-            ))
-            .child(self.select_row(
-                "ligatures",
-                language.text(crate::i18n::Message::SettingsFontLigatures),
-                language.text(crate::i18n::Message::SettingsFontLigaturesDescription),
-                cx,
-            ))
-            .child(self.select_row(
-                "cell_width_mode",
-                language.pick("字体间距", "Character spacing"),
-                help("cell_width_mode", language),
-                cx,
-            ))
-            .child(self.select_row(
-                "scrollback_lines",
-                language.text(crate::i18n::Message::SettingsScrollingHistory),
-                language.text(crate::i18n::Message::SettingsScrollingHistoryDescription),
-                cx,
-            ))
-            .child(self.scroll_speed_row(cx))
-            .child(self.switch_row(
-                "fetch",
-                language.pick("启动欢迎信息", "Startup system information"),
-                help("fetch", language),
-                self.runtime.fetch,
-                cx,
-            ))
-            .child(self.switch_row(
-                "powerline",
-                language.pick("Powerline 提示符", "Powerline prompt"),
-                help("powerline", language),
-                self.runtime.powerline,
-                cx,
-            ));
+        let terminal =
+            self.group(language.pick("终端外观", "Terminal appearance"), cx)
+                .child(self.switch_row(
+                    "terminal_label_badges",
+                    language.text(crate::i18n::Message::SettingsAppearanceTerminalLabelBadges),
+                    language.text(
+                        crate::i18n::Message::SettingsAppearanceTerminalLabelBadgesDescription,
+                    ),
+                    self.runtime.terminal_label_badges,
+                    cx,
+                ))
+                .child(self.row(
+                    language.text(crate::i18n::Message::SettingsFontEnglish),
+                    help("font_family", language),
+                    font_picker,
+                    cx,
+                ))
+                .child(self.row(
+                    language.text(crate::i18n::Message::SettingsFontChinese),
+                    language.text(crate::i18n::Message::SettingsFontChineseDescription),
+                    cjk_font_picker,
+                    cx,
+                ))
+                .child(self.font_size_row(false, cx))
+                .child(self.switch_row(
+                    "ctrl_wheel_font_zoom",
+                    language.text(crate::i18n::Message::SettingsFontCtrlWheelZoom),
+                    language.text(crate::i18n::Message::SettingsFontCtrlWheelZoomDescription),
+                    self.runtime.ctrl_wheel_font_zoom,
+                    cx,
+                ))
+                .child(self.select_row(
+                    "ligatures",
+                    language.text(crate::i18n::Message::SettingsFontLigatures),
+                    language.text(crate::i18n::Message::SettingsFontLigaturesDescription),
+                    cx,
+                ))
+                .child(self.select_row(
+                    "cell_width_mode",
+                    language.pick("字体间距", "Character spacing"),
+                    help("cell_width_mode", language),
+                    cx,
+                ))
+                .child(self.select_row(
+                    "scrollback_lines",
+                    language.text(crate::i18n::Message::SettingsScrollingHistory),
+                    language.text(crate::i18n::Message::SettingsScrollingHistoryDescription),
+                    cx,
+                ))
+                .child(self.scroll_speed_row(cx))
+                .child(self.switch_row(
+                    "fetch",
+                    language.pick("启动欢迎信息", "Startup system information"),
+                    help("fetch", language),
+                    self.runtime.fetch,
+                    cx,
+                ))
+                .child(self.switch_row(
+                    "powerline",
+                    language.pick("Powerline 提示符", "Powerline prompt"),
+                    help("powerline", language),
+                    self.runtime.powerline,
+                    cx,
+                ));
 
         v_flex()
             .w_full()
