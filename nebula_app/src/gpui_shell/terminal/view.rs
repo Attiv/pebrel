@@ -13,6 +13,7 @@ pub(super) mod cursor;
 mod cwd_report;
 mod editor;
 mod image_paste;
+mod input_protocol;
 mod layout;
 #[cfg(all(test, windows, feature = "gpui-test-support"))]
 mod native_cmd_tests;
@@ -322,6 +323,7 @@ pub struct TerminalView {
     last_process_probe: Option<std::time::Instant>,
     prompt_process_probe: Option<gpui::Task<()>>,
     prompt_input_epoch: u64,
+    input_protocol: Option<input_protocol::PendingRecovery>,
     native_prompt_seen: bool,
     native_prompt_epoch: Option<u64>,
     last_prompt_process_probe: Option<std::time::Instant>,
@@ -565,6 +567,7 @@ impl TerminalView {
         }
         match event {
             TermEvent::Wakeup => {
+                self.prepare_terminal_input(cx);
                 self.flush_pending_runtime_submit(cx);
                 self.flush_pending_shell_command(cx);
                 if self.output_visible {
@@ -734,6 +737,8 @@ impl TerminalView {
 
     /// `Exited` 只对宿主发一次；重复的退出信号（ChildExit 之后必然跟 Exit）只更新文案。
     fn mark_exited(&mut self, message: String, cx: &mut Context<Self>) {
+        self.marked_text = None;
+        self.input_protocol = None;
         self.port_forward_task = None;
         self.port_forwards.clear();
         self.confirmation.invalidate();
@@ -755,13 +760,28 @@ impl TerminalView {
     }
 
     fn write_bytes(&self, bytes: Vec<u8>) {
+        if !self.accepts_input() {
+            return;
+        }
         if let Some(session) = &self.session {
             session.notifier.notify(bytes);
         }
     }
 
+    fn accepts_input(&self) -> bool {
+        self.exited.is_none()
+            && !matches!(self.ssh_stage, Some(crate::ssh_session::SshStage::Failed(_)))
+    }
+
+    fn shell_input_screen(&self) -> bool {
+        self.session.as_ref().is_some_and(|session| session.term.lock().nebula_shell_input_screen())
+    }
+
     /// 输入后回到底部并请求重绘。
     fn write_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        if !self.accepts_input() {
+            return;
+        }
         self.completion_editor.invalidate();
         self.editor_query_task = None;
         self.cursor_animation.note_input(&bytes);
@@ -1056,11 +1076,15 @@ impl TerminalView {
     }
 
     fn paste_now_impl(&mut self, text: &str, emit: bool, cx: &mut Context<Self>) {
+        if !self.accepts_input() {
+            return;
+        }
+        self.prepare_terminal_input(cx);
         let normalized = text.replace("\r\n", "\r").replace('\n', "\r");
         self.capture_native_paste_submission(&normalized, cx);
         // 行镜像吃粘贴的字面文本；多行/控制字符由引擎侧作废（与旧壳
         // `nebula_input_text` 的防注入契约一致）。
-        if !self.term_mode().contains(TermMode::ALT_SCREEN) {
+        if self.shell_input_screen() {
             crate::display::nebula_input_text(&mut self.suggest, &normalized);
         }
         let bytes = if self.term_mode().contains(TermMode::BRACKETED_PASTE) {
@@ -1081,12 +1105,17 @@ impl TerminalView {
 
     fn track_encoded_key(&mut self, ks: &gpui::Keystroke, mode: &TermMode, cx: &mut Context<Self>) {
         self.image_paste.observe_key(ks);
-        if self.marked_text.is_some() || mode.contains(TermMode::ALT_SCREEN) {
+        if self.marked_text.is_some()
+            || (mode.contains(TermMode::ALT_SCREEN) && !self.shell_input_screen())
+        {
             return;
         }
         let mods = &ks.modifiers;
         let plain_mods = !mods.control && !mods.alt && !mods.platform;
         match ks.key.as_str() {
+            "backspace" if keymap::is_mac_line_delete(ks) => {
+                crate::display::nebula_clear_line(&mut self.suggest);
+            },
             "enter" if keymap::preserves_enter_modifiers(ks, mode) => {
                 crate::display::nebula_clear_line(&mut self.suggest);
             },
@@ -1112,9 +1141,10 @@ impl TerminalView {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if self.exited.is_some() || self.answer_reader.is_some() {
+        if !self.accepts_input() || self.answer_reader.is_some() {
             return;
         }
+        self.prepare_terminal_input(cx);
         // IME 组合和 Windows 原生窗口快捷键不编码、不拦截。GPUI Windows
         // 在 `stop_propagation` 后会跳过 `TranslateMessage` 和 `DispatchMessage`，
         // 必须保留输入法组合、窗口关闭和系统菜单的默认处理。
@@ -1315,9 +1345,10 @@ impl gpui::EntityInputHandler for TerminalView {
             return;
         }
         let had_marked_text = self.marked_text.take().is_some();
-        if !text.is_empty() && self.exited.is_none() {
+        self.prepare_terminal_input(cx);
+        if !text.is_empty() && self.accepts_input() {
             // 行镜像吃 IME 管道的字符（含中文提交与普通击键文本）。
-            if !self.term_mode().contains(TermMode::ALT_SCREEN) {
+            if self.shell_input_screen() {
                 crate::display::nebula_input_text(&mut self.suggest, text);
             }
             self.write_user_text(text.to_owned(), false, text.as_bytes().to_vec(), cx);
@@ -1335,7 +1366,7 @@ impl gpui::EntityInputHandler for TerminalView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.answer_reader.is_some() {
+        if !self.accepts_input() || self.answer_reader.is_some() {
             return;
         }
         let marked_text = if new_text.is_empty() { None } else { Some(new_text.to_string()) };

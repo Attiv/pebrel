@@ -206,6 +206,9 @@ impl StreamProcessor {
         event_proxy: &U,
         bytes: &[u8],
     ) {
+        if !bytes.is_empty() {
+            terminal.nebula_note_output();
+        }
         let osc_events = self.cwd_sniffer.feed(bytes);
         let mut advanced = 0;
         for (offset, event) in osc_events {
@@ -217,11 +220,11 @@ impl StreamProcessor {
             match event {
                 OscEvent::Cwd(cwd) => event_proxy.send_event(Event::CwdReport(cwd)),
                 OscEvent::CommandStart => {
-                    terminal.nebula_end_prompt();
+                    terminal.nebula_start_command();
                     event_proxy.send_event(Event::CommandStart);
                 },
                 OscEvent::CommandDone { exit_code } => {
-                    terminal.nebula_end_prompt();
+                    terminal.nebula_finish_command();
                     event_proxy.send_event(Event::CommandDone { exit_code })
                 },
                 OscEvent::UserVar { name, value } => {
@@ -971,6 +974,119 @@ mod tests {
     use crate::event::VoidListener;
     use crate::term::Config;
     use crate::term::test::TermSize;
+
+    #[test]
+    fn shell_return_restores_application_input_modes_at_every_chunk_boundary() {
+        use crate::term::TermMode;
+        let enabled = b"\x1b]133;A\x07\x1b]133;C\x07\x1b[>31u\x1b[?1000h\x1b[?1006h\x1b[?1004h";
+        for ending in [b"\x1b]133;D;1\x07".as_slice(), b"\x1b]133;A\x07"] {
+            for split in 0..=ending.len() {
+                let mut term = Term::new(
+                    Config { kitty_keyboard: true, ..Config::default() },
+                    &TermSize::new(20, 2),
+                    VoidListener,
+                );
+                let mut stream = StreamProcessor::default();
+                stream.feed(&mut term, &VoidListener, enabled);
+                assert!(
+                    term.mode()
+                        .contains(TermMode::REPORT_ALL_KEYS_AS_ESC | TermMode::MOUSE_REPORT_CLICK)
+                );
+                stream.feed(&mut term, &VoidListener, &ending[..split]);
+                stream.feed(&mut term, &VoidListener, &ending[split..]);
+                assert!(
+                    !term.mode().intersects(
+                        TermMode::KITTY_KEYBOARD_PROTOCOL
+                            | TermMode::MOUSE_MODE
+                            | TermMode::SGR_MOUSE
+                            | TermMode::FOCUS_IN_OUT
+                    ),
+                    "{ending:?}, split {split}"
+                );
+                stream.feed(&mut term, &VoidListener, b"\x1b[>1u\x1b[<u");
+                assert!(!term.mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL));
+            }
+        }
+    }
+
+    #[test]
+    fn shell_return_preserves_the_shells_own_negotiated_protocol() {
+        use crate::term::TermMode;
+        let mut term = Term::new(
+            Config { kitty_keyboard: true, ..Config::default() },
+            &TermSize::new(20, 2),
+            VoidListener,
+        );
+        let mut stream = StreamProcessor::default();
+        stream.feed(
+            &mut term,
+            &VoidListener,
+            b"\x1b[=1u\x1b[?9001h\x1b[?2004h\x1b]133;A\x07\x1b]133;C\x07",
+        );
+        let baseline = *term.mode();
+        stream.feed(&mut term, &VoidListener, b"\x1b[>31u\x1b[?1000h\x1b[?1006h");
+        assert!(
+            term.mode().contains(TermMode::REPORT_ALL_KEYS_AS_ESC | TermMode::MOUSE_REPORT_CLICK)
+        );
+        stream.feed(&mut term, &VoidListener, b"\x1b]133;D;0\x07");
+        assert_eq!(*term.mode(), baseline);
+        stream.feed(&mut term, &VoidListener, b"\x1b[<u");
+        assert!(!term.mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL));
+        assert!(term.mode().contains(TermMode::WIN32_INPUT_MODE | TermMode::BRACKETED_PASTE));
+    }
+
+    #[test]
+    fn shell_return_keeps_live_tui_modes_and_cleans_both_keyboard_stacks() {
+        use crate::term::TermMode;
+        let mut term = Term::new(
+            Config { kitty_keyboard: true, ..Config::default() },
+            &TermSize::new(20, 2),
+            VoidListener,
+        );
+        let mut stream = StreamProcessor::default();
+        stream.feed(
+            &mut term,
+            &VoidListener,
+            b"\x1b]133;A\x07\x1b]133;C\x07\x1b[>31u\x1b[?1049h\x1b[>31u\x1b[?1000h\x1b[?1006h",
+        );
+        let live = *term.mode();
+        // Embedded shells/prompts in an alternate-screen TUI are not a return
+        // to our primary-screen shell. Neither silence nor a resize ends it.
+        stream.feed(&mut term, &VoidListener, b"\x1b]133;A\x07\x1b]133;C\x07\x1b]133;D;0\x07");
+        stream.feed(&mut term, &VoidListener, b"");
+        term.resize(TermSize::new(24, 3));
+        assert_eq!(*term.mode(), live);
+        stream.feed(&mut term, &VoidListener, b"\x1b[?1049l\x1b]133;D;1\x07");
+        assert!(!term.mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL | TermMode::MOUSE_MODE));
+        stream.feed(&mut term, &VoidListener, b"\x1b[?1049h");
+        assert!(
+            !term.mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL),
+            "inactive stack must not resurrect leaked flags"
+        );
+    }
+
+    #[test]
+    fn shell_return_recovery_stays_in_wire_order_and_refreshes_each_command_baseline() {
+        use crate::term::TermMode;
+        let bytes = b"\x1b]133;A\x07\x1b]133;C\x07\x1b[>31u\x1b[?1000h\x1b]133;D;1\x07\x1b[=1u\x1b]133;A\x07\x1b]133;C\x07\x1b[>31u\x1b[?1006h\x1b]133;D;0\x07\x1b[>2u";
+        for split in 0..=bytes.len() {
+            let mut term = Term::new(
+                Config { kitty_keyboard: true, ..Config::default() },
+                &TermSize::new(20, 2),
+                VoidListener,
+            );
+            let mut stream = StreamProcessor::default();
+            stream.feed(&mut term, &VoidListener, &bytes[..split]);
+            stream.feed(&mut term, &VoidListener, &bytes[split..]);
+            assert!(term.mode().contains(TermMode::REPORT_EVENT_TYPES));
+            stream.feed(&mut term, &VoidListener, b"\x1b[<u");
+            assert_eq!(
+                *term.mode() & TermMode::KITTY_KEYBOARD_PROTOCOL,
+                TermMode::DISAMBIGUATE_ESC_CODES
+            );
+            assert!(!term.mode().intersects(TermMode::MOUSE_MODE | TermMode::SGR_MOUSE));
+        }
+    }
 
     #[test]
     fn animation_snapshots_cannot_observe_a_partial_synchronized_update() {

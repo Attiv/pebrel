@@ -41,6 +41,9 @@ impl TerminalView {
         bytes: Vec<u8>,
         cx: &mut Context<Self>,
     ) {
+        if !self.accepts_input() {
+            return;
+        }
         self.cursor_animation.note_encoded_key(&keystroke, &bytes);
         cx.emit(TerminalViewEvent::UserInput(TerminalInput::Key(keystroke)));
         self.write_input(bytes, cx);
@@ -54,6 +57,9 @@ impl TerminalView {
         bytes: Vec<u8>,
         cx: &mut Context<Self>,
     ) {
+        if !self.accepts_input() {
+            return;
+        }
         cx.emit(TerminalViewEvent::UserInput(TerminalInput::Text { text, paste }));
         self.write_input(bytes, cx);
     }
@@ -65,9 +71,10 @@ impl TerminalView {
         keystroke: &gpui::Keystroke,
         cx: &mut Context<Self>,
     ) {
-        if self.exited.is_some() {
+        if !self.accepts_input() {
             return;
         }
+        self.prepare_terminal_input(cx);
         let mode = self.term_mode();
         self.track_encoded_key(keystroke, &mode, cx);
         if let Some(bytes) = keymap::encode(keystroke, &mode) {
@@ -78,13 +85,14 @@ impl TerminalView {
 
     /// 文本提交与粘贴都保留语义，由接收端自行套 bracketed-paste 包装。
     pub(crate) fn apply_broadcast_text(&mut self, text: &str, paste: bool, cx: &mut Context<Self>) {
-        if text.is_empty() || self.exited.is_some() {
+        if text.is_empty() || !self.accepts_input() {
             return;
         }
+        self.prepare_terminal_input(cx);
         if paste {
             self.paste_now_impl(text, false, cx);
         } else {
-            if !self.term_mode().contains(TermMode::ALT_SCREEN) {
+            if self.shell_input_screen() {
                 crate::display::nebula_input_text(&mut self.suggest, text);
             }
             self.write_input(text.as_bytes().to_vec(), cx);

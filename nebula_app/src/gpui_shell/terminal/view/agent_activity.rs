@@ -100,6 +100,7 @@ impl TerminalView {
             log::warn!("agent session index: could not record {} {id}: {error}", event.source);
         }
         if event.kind == AiHookKind::SessionEnd {
+            self.input_protocol_owner_exited();
             self.clear_foreground_agent_state(cx);
         } else {
             self.running_program = Some(event.source.clone());
@@ -150,6 +151,10 @@ impl TerminalView {
         }
         self.flush_pending_runtime_submit(cx);
         self.flush_pending_shell_command(cx);
+        if self.recover_input_protocol_at_prompt() {
+            self.finish_foreground_command(None, cx);
+            return;
+        }
         self.reconcile_shell_activity(cx);
         self.on_native_cmd_prompt(cx);
         self.probe_missing_codex_session(cx);
@@ -167,6 +172,7 @@ impl TerminalView {
                         &term,
                         expected,
                         &self.suggest.suggest_env,
+                        false,
                     )
                 });
             let screen = self.agent_activity.allows_screen().then(|| {

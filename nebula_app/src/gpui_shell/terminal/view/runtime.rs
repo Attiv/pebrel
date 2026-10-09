@@ -111,6 +111,8 @@ impl TerminalView {
         );
         self.ssh_connect_last_step = std::time::Instant::now();
         if matches!(stage, crate::ssh_session::SshStage::Failed(_)) {
+            self.marked_text = None;
+            self.input_protocol = None;
             self.port_forward_task = None;
             self.port_forwards.clear();
             self.pending_runtime_submit = None;
@@ -488,6 +490,7 @@ impl TerminalView {
         repeat: u16,
         cx: &mut Context<Self>,
     ) -> Result<usize, crate::runtime_api::ApiError> {
+        self.prepare_terminal_input(cx);
         if let Some(reason) = &self.exited {
             return Err(crate::runtime_api::ApiError::new(
                 "invalid_state",
@@ -509,6 +512,7 @@ impl TerminalView {
         command: String,
         cx: &mut Context<Self>,
     ) -> Result<u64, crate::runtime_api::ApiError> {
+        self.prepare_terminal_input(cx);
         crate::runtime_api::validate_command_line(&command)?;
         if self.ssh_destination.is_some() {
             return Err(crate::runtime_api::ApiError::new(
@@ -572,6 +576,7 @@ impl TerminalView {
         submit: bool,
         cx: &mut Context<Self>,
     ) -> Result<(), crate::runtime_api::ApiError> {
+        self.prepare_terminal_input(cx);
         crate::runtime_api::validate_prompt(&text)?;
         if let Some(reason) = &self.exited {
             return Err(crate::runtime_api::ApiError::new(
@@ -671,6 +676,7 @@ impl TerminalView {
         origin: InputOrigin,
         cx: &mut Context<Self>,
     ) -> Result<(), crate::runtime_api::ApiError> {
+        self.prepare_terminal_input(cx);
         crate::runtime_api::validate_paste_text(&text)?;
         self.runtime_paste_inner(text, submit, false, origin, cx)
     }
@@ -708,6 +714,7 @@ impl TerminalView {
         origin: InputOrigin,
         cx: &mut Context<Self>,
     ) -> Result<(), crate::runtime_api::ApiError> {
+        self.prepare_terminal_input(cx);
         self.ensure_local_context_allowed(origin)?;
         let agent = self.runtime_chat_agent();
         if require_agent && agent.is_none() {
@@ -744,6 +751,9 @@ impl TerminalView {
 
         let codex_submit =
             submit && self.runtime_agent().is_some_and(|agent| agent.kind == "codex");
+        if submit {
+            self.capture_runtime_prompt();
+        }
         if submit && !codex_submit {
             let submit_bytes = self.runtime_key_sequence(
                 crate::runtime_api::RuntimeKey::Enter,
@@ -920,6 +930,7 @@ impl TerminalView {
         let pid = session.shell_pid;
         let started = self.command_started;
         let input_epoch = self.prompt_input_epoch;
+        let input_lease = self.input_protocol_probe();
         self.last_prompt_process_probe = Some(std::time::Instant::now());
         let work =
             cx.background_executor().spawn(async move { crate::process_tree::descendants(pid) });
@@ -927,15 +938,34 @@ impl TerminalView {
             let result = work.await;
             let _ = this.update(cx, |view, cx| {
                 view.prompt_process_probe = None;
-                view.apply_prompt_process_probe(started, input_epoch, result, cx);
+                view.apply_prompt_process_probe_with_lease(
+                    started,
+                    input_epoch,
+                    input_lease,
+                    result,
+                    cx,
+                );
             });
         }));
     }
 
+    #[cfg(all(test, feature = "gpui-test-support"))]
     pub(super) fn apply_prompt_process_probe(
         &mut self,
         started: Option<std::time::Instant>,
         input_epoch: u64,
+        result: Result<Vec<crate::process_tree::ProcessEntry>, String>,
+        cx: &mut Context<Self>,
+    ) {
+        let input_lease = self.input_protocol_probe();
+        self.apply_prompt_process_probe_with_lease(started, input_epoch, input_lease, result, cx);
+    }
+
+    pub(super) fn apply_prompt_process_probe_with_lease(
+        &mut self,
+        started: Option<std::time::Instant>,
+        input_epoch: u64,
+        input_lease: Option<nebula_terminal::term::InputModeLease>,
         result: Result<Vec<crate::process_tree::ProcessEntry>, String>,
         cx: &mut Context<Self>,
     ) {
@@ -944,6 +974,7 @@ impl TerminalView {
             || self.prompt_input_epoch != input_epoch
             || self.pending_runtime_submit.is_some()
             || self.exited.is_some()
+            || !self.input_protocol_probe_current(input_lease)
         {
             return;
         }
@@ -963,9 +994,9 @@ impl TerminalView {
                         &crate::process_tree::display_name(&p.executable),
                     )
             });
-            self.consume_native_prompt();
             if root_is_cmd {
                 if nested_shell {
+                    self.consume_native_prompt();
                     self.command_running_disproved = true;
                     if !self.agent_activity.hook_seen()
                         && !self.agent_activity.status().is_decided()
@@ -977,6 +1008,10 @@ impl TerminalView {
                     }
                     cx.notify();
                 } else {
+                    if !self.recover_input_protocol_after_process_exit(input_lease) {
+                        return;
+                    }
+                    self.consume_native_prompt();
                     self.finish_foreground_command(None, cx);
                 }
             }
@@ -1001,10 +1036,14 @@ impl TerminalView {
                     &term,
                     expected,
                     &self.suggest.suggest_env,
+                    false,
                 )
             })
         });
         if restored {
+            if !self.recover_input_protocol_after_process_exit(input_lease) {
+                return;
+            }
             self.finish_foreground_command(None, cx);
         }
     }
@@ -1065,6 +1104,7 @@ impl TerminalView {
         }
         self.last_process_probe = Some(std::time::Instant::now());
 
+        let input_lease = self.input_protocol_probe();
         let Ok(evidence) =
             crate::process_tree::activity_evidence(shell_pid, self.agent_activity.primary_pid())
         else {
@@ -1079,6 +1119,12 @@ impl TerminalView {
                     && evidence.agent.is_none()
                     && !evidence.child_present))
         {
+            if !self.input_protocol_probe_current(input_lease) {
+                return;
+            }
+            if !self.recover_input_protocol_after_process_exit(input_lease) {
+                return;
+            }
             // This establishes process exit, not the turn's success or an exit
             // code. The normal command boundary owns cleanup and deduplication.
             self.finish_foreground_command(None, cx);

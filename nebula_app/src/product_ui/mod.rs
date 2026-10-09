@@ -89,9 +89,9 @@ pub(crate) use file_operations::send_to_recycle_bin;
 #[cfg(windows)]
 pub(crate) use input_state::nebula_input_from_raw_grid;
 pub(crate) use input_state::{
-    nebula_clear_line, nebula_input_backspace, nebula_input_char, nebula_input_delete_word,
-    nebula_input_text, nebula_prompt_line_from_raw_grid,
-    nebula_shell_prompt_restored_from_raw_grid, nebula_shell_ready_from_raw_grid,
+    nebula_clear_line, nebula_idle_prompt_from_raw_grid, nebula_input_backspace, nebula_input_char,
+    nebula_input_delete_word, nebula_input_text, nebula_prompt_line_from_raw_grid,
+    nebula_shell_prompt_restored_from_raw_grid,
 };
 pub(crate) use network_proxy_model::{
     MANUAL_PROXY_PROTOCOL_OPTIONS, ManualProxyProtocol, ProxyTestStatus, compose_manual_proxy_url,

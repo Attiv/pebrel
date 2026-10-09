@@ -104,10 +104,13 @@ fn custom_native_prompts_handle_empty_submit_paste_and_runtime_without_fake_hist
                     &proxy,
                     &prompt_bytes(prompt, ""),
                 );
-                assert!(crate::display::nebula_shell_ready_from_raw_grid(
-                    &view.session.as_ref().unwrap().term.lock(),
-                    &view.suggest.suggest_env,
-                ));
+                assert!(
+                    crate::display::nebula_idle_prompt_from_raw_grid(
+                        &view.session.as_ref().unwrap().term.lock(),
+                        &view.suggest.suggest_env,
+                    )
+                    .is_some()
+                );
                 match action {
                     "empty" => view.commit_line(cx),
                     "paste" => view.paste_now_impl(&format!("{command}\r\n"), false, cx),

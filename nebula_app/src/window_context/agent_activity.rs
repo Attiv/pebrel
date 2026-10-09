@@ -126,6 +126,7 @@ impl WindowContext {
                             &term,
                             expected,
                             &state.suggest_env,
+                            false,
                         )
                     });
                 let screen = state.agent_activity.allows_screen().then(|| {

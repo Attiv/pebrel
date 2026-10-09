@@ -1,6 +1,5 @@
 //! Exports the `Term` type which is a high-level API for the Grid.
 
-use std::collections::VecDeque;
 use std::ops::{Index, IndexMut, Range};
 use std::sync::Arc;
 use std::{cmp, mem, ptr, str};
@@ -41,6 +40,7 @@ pub mod search;
 
 use damage::TermDamageState;
 pub use damage::{LineDamageBounds, TermDamage, TermDamageIterator};
+pub use prompt::InputModeLease;
 pub use renderable::{RenderableContent, RenderableCursor};
 
 /// Minimum number of columns.
@@ -230,15 +230,8 @@ pub struct Term<T> {
     /// Information about damaged cells.
     damage: TermDamageState,
 
-    /// Absolute line numbers of shell prompt rows reported via OSC 133;A
-    /// (see [`Grid::scrolled_out`] for the numbering). Strictly increasing;
-    /// stale entries are pruned lazily. Primary screen only.
-    nebula_prompt_marks: VecDeque<usize>,
-
-    /// Whether OSC 133 currently identifies this pane as accepting shell input.
-    nebula_prompt_active: bool,
-    /// OSC 133;B input start in absolute grid coordinates.
-    nebula_prompt_input: Option<(usize, Column)>,
+    /// Shell prompt geometry and its negotiated input-mode baseline.
+    prompt: prompt::PromptState,
 
     /// One-shot suppression of the next primary-DA answer: the side-loaded
     /// ConPTY host's bring-up DA1 query was already answered by the response
@@ -404,9 +397,7 @@ impl<T> Term<T> {
             tabs,
             inactive_keyboard_mode_stack: Default::default(),
             keyboard_mode_stack: Default::default(),
-            nebula_prompt_marks: Default::default(),
-            nebula_prompt_active: false,
-            nebula_prompt_input: None,
+            prompt: Default::default(),
             active_charset: Default::default(),
             vi_mode_cursor: Default::default(),
             cursor_style: Default::default(),
@@ -783,8 +774,7 @@ impl<T> Term<T> {
 
         // Reflow rewraps history rows, so absolute prompt-mark lines no longer
         // match; drop them rather than jump to shifted positions.
-        self.nebula_prompt_marks.clear();
-        self.nebula_prompt_input = None;
+        self.prompt.clear_geometry();
 
         // Invalidate selection and tabs only when necessary.
         if old_cols != num_cols {
@@ -841,6 +831,7 @@ impl<T> Term<T> {
 
         mem::swap(&mut self.grid, &mut self.inactive_grid);
         self.mode ^= TermMode::ALT_SCREEN;
+        self.prompt.screen_swapped();
         self.selection = None;
         self.mark_fully_damaged();
     }
@@ -1902,9 +1893,7 @@ impl<T: EventListener> Handler for Term<T> {
         self.cursor_blinking_override = None;
         self.grid.reset();
         self.inactive_grid.reset();
-        self.nebula_prompt_marks.clear();
-        self.nebula_prompt_input = None;
-        self.nebula_prompt_active = false;
+        self.prompt.reset();
         self.scroll_region = Line(0)..Line(self.screen_lines() as i32);
         self.tabs = TabStops::new(self.columns());
         self.title_stack = Vec::new();

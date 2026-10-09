@@ -102,6 +102,41 @@ fn move_over(cx: &mut VisualTestContext, button: Option<MouseButton>) {
 }
 
 #[gpui::test]
+#[cfg(target_os = "macos")]
+fn mac_delete_chords_use_the_focused_terminal_and_dead_sessions_ignore_keys(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::gpui_shell::scientific_render::init);
+    let (probe, mut cx) = open(cx);
+    let terminal = probe.read_with(&cx, |probe, _| probe.terminal.clone());
+    let receiver = terminal.update(&mut cx, |view, _| view.install_completion_test_session());
+    cx.update(|window, cx| {
+        let focus = terminal.read(cx).focus_handle.clone();
+        focus.focus(window, cx);
+    });
+    draw(&mut cx);
+    cx.simulate_keystrokes("cmd-backspace");
+    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x15"));
+    cx.simulate_keystrokes("alt-backspace");
+    assert!(
+        matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x1b\x7f")
+    );
+    cx.simulate_keystrokes("cmd-left");
+    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x01"));
+    cx.simulate_keystrokes("cmd-right");
+    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x05"));
+    terminal.update(&mut cx, |view, cx| {
+        view.apply_ssh_stage(crate::ssh_session::SshStage::Failed("disconnected".into()), cx);
+    });
+    cx.simulate_keystrokes("cmd-backspace");
+    cx.simulate_keystrokes("alt-backspace");
+    cx.simulate_keystrokes("cmd-left");
+    cx.simulate_keystrokes("cmd-right");
+    cx.simulate_keystrokes("a");
+    assert!(receiver.try_recv().is_err());
+}
+
+#[gpui::test]
 fn hover_focus_requires_opt_in_and_emits_once(cx: &mut TestAppContext) {
     let (probe, mut cx) = open(cx);
     move_over(&mut cx, None);

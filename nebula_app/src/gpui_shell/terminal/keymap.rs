@@ -277,6 +277,16 @@ pub fn encode(ks: &Keystroke, mode: &TermMode) -> Option<Vec<u8>> {
     if is_native_window_shortcut(ks) {
         return None;
     }
+    if let Some(key) = mac_line_edit_key(ks) {
+        // Adapt the Mac editing chord before protocol selection: a live TUI
+        // still receives negotiated Ctrl+A/E/U, not an unnegotiated raw byte.
+        let mut editing_key = ks.clone();
+        editing_key.key = key.to_string();
+        editing_key.key_char = Some(key.to_string());
+        editing_key.modifiers.platform = false;
+        editing_key.modifiers.control = true;
+        return encode(&editing_key, mode);
+    }
     let mods = &ks.modifiers;
 
     // macOS supplies the layout/IME result in `key_char` while `key` is the
@@ -413,12 +423,64 @@ pub fn encode(ks: &Keystroke, mode: &TermMode) -> Option<Vec<u8>> {
     None
 }
 
+pub(super) fn is_mac_line_delete(ks: &Keystroke) -> bool {
+    mac_line_edit_key(ks) == Some('u')
+}
+
+fn mac_line_edit_key(ks: &Keystroke) -> Option<char> {
+    let mods = &ks.modifiers;
+    if !cfg!(target_os = "macos")
+        || !mods.platform
+        || mods.control
+        || mods.alt
+        || mods.shift
+        || mods.function
+    {
+        return None;
+    }
+    match ks.key.as_str() {
+        "backspace" => Some('u'),
+        "left" => Some('a'),
+        "right" => Some('e'),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn keystroke(key: &str) -> Keystroke {
         Keystroke { modifiers: gpui::Modifiers::default(), key: key.to_owned(), key_char: None }
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn mac_cmd_delete_uses_negotiated_line_deletion_and_option_deletes_words() {
+        let line = Keystroke::parse("cmd-backspace").unwrap();
+        let word = Keystroke::parse("alt-backspace").unwrap();
+        assert_eq!(encode(&line, &TermMode::default()), Some(b"\x15".to_vec()));
+        for mode in [pi_keyboard_mode(), TermMode::REPORT_ALL_KEYS_AS_ESC] {
+            assert_eq!(encode(&line, &mode), Some(b"\x1b[117;5u".to_vec()));
+            assert_eq!(encode(&word, &mode), Some(b"\x1b\x7f".to_vec()));
+        }
+        assert_eq!(encode(&word, &TermMode::default()), Some(b"\x1b\x7f".to_vec()));
+        assert_eq!(encode(&keystroke("backspace"), &TermMode::default()), Some(b"\x7f".to_vec()));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn mac_cmd_arrows_use_negotiated_line_boundaries() {
+        for (chord, ordinary, extended) in [
+            ("cmd-left", b"\x01".as_slice(), b"\x1b[97;5u".as_slice()),
+            ("cmd-right", b"\x05".as_slice(), b"\x1b[101;5u".as_slice()),
+        ] {
+            let key = Keystroke::parse(chord).unwrap();
+            assert_eq!(encode(&key, &TermMode::default()).as_deref(), Some(ordinary));
+            assert_eq!(encode(&key, &pi_keyboard_mode()).as_deref(), Some(extended));
+        }
+        assert_eq!(encode(&keystroke("left"), &TermMode::default()), Some(b"\x1b[D".to_vec()));
+        assert_eq!(encode(&keystroke("right"), &TermMode::default()), Some(b"\x1b[C".to_vec()));
     }
 
     #[test]

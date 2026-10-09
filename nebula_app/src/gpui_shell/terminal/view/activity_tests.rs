@@ -15,6 +15,284 @@ fn hook(session: &str, name: &str, sequence: u64) -> AiHookEvent {
 }
 
 #[gpui::test]
+fn unintegrated_ssh_agent_exit_restores_protocol_only_after_the_shell_returns(
+    cx: &mut TestAppContext,
+) {
+    let (view, window, _) = open(cx);
+    for alternate in [false, true] {
+        view.update(window, |view, cx| {
+            let (session, _, _, proxy) = session::test_session_with_events();
+            view.session = Some(session);
+            view.clear_foreground_agent_state(cx);
+            view.suggest.suggest_env =
+                crate::display::SuggestEnv::Ssh { destination: "fish.test".into() };
+            view.session.as_ref().unwrap().term.lock().set_options(nebula_terminal::term::Config {
+                kitty_keyboard: true,
+                ..Default::default()
+            });
+            screen(view, "user@host:~$ claude");
+            view.suggest.line_buf = "claude".into();
+            view.commit_line(cx);
+            assert!(
+                view.suggest.pending_command_prompt.is_some(),
+                "use the real confirmed shell submission"
+            );
+            let id = if alternate { "no-osc-alt" } else { "no-osc-primary" };
+            assert!(view.handle_ai_hook(&hook(id, "SessionStart", 1), cx));
+            nebula_terminal::event_loop::StreamProcessor::default().feed(
+                &mut view.session.as_ref().unwrap().term.lock(),
+                &proxy,
+                b"\x1b[>31u\x1b[?1000h\x1b[?1006h",
+            );
+            if alternate {
+                feed(view, b"\x1b[?1049h\x1b[>31u");
+            }
+            screen(view, "AI is still open");
+            assert!(view.handle_ai_hook(&hook(id, "Stop", 2), cx));
+            view.refresh_agent_screen_state(cx);
+            assert!(
+                view.term_mode()
+                    .contains(TermMode::REPORT_ALL_KEYS_AS_ESC | TermMode::MOUSE_REPORT_CLICK)
+            );
+            assert!(view.handle_ai_hook(&hook(id, "SessionEnd", 3), cx));
+            view.refresh_agent_screen_state(cx);
+            assert!(
+                view.term_mode().contains(TermMode::REPORT_ALL_KEYS_AS_ESC),
+                "SessionEnd can precede VT cleanup"
+            );
+            screen(view, "user@host:~$ ");
+            let cursor = view.session.as_ref().unwrap().term.lock().grid().cursor.point;
+            view.refresh_agent_screen_state(cx);
+            assert!(
+                !view
+                    .term_mode()
+                    .intersects(TermMode::KITTY_KEYBOARD_PROTOCOL | TermMode::MOUSE_MODE)
+            );
+            assert_eq!(view.term_mode().contains(TermMode::ALT_SCREEN), alternate);
+            let term = view.session.as_ref().unwrap().term.lock();
+            assert_eq!(term.grid().cursor.point, cursor);
+            assert!(crate::display::nebula_shell_prompt_restored_from_raw_grid(
+                &term,
+                "user@host:~$",
+                &view.suggest.suggest_env,
+                true
+            ));
+            drop(term);
+            if alternate {
+                screen(view, "user@host:~$ claude");
+                view.suggest.line_buf = "claude".into();
+                view.commit_line(cx);
+                assert!(
+                    view.input_protocol.is_some(),
+                    "next shell submission retains ownership on its preserved buffer"
+                );
+                assert!(view.handle_ai_hook(&hook("no-osc-alt-next", "SessionStart", 1), cx));
+                nebula_terminal::event_loop::StreamProcessor::default().feed(
+                    &mut view.session.as_ref().unwrap().term.lock(),
+                    &proxy,
+                    b"\x1b[>31u\x1b[?1000h",
+                );
+                assert!(!view.session.as_ref().unwrap().term.lock().nebula_shell_input_screen());
+                screen(view, "next AI is open");
+                assert!(view.handle_ai_hook(&hook("no-osc-alt-next", "SessionEnd", 2), cx));
+                screen(view, "user@host:~$ ");
+                view.refresh_agent_screen_state(cx);
+                assert!(
+                    !view
+                        .term_mode()
+                        .intersects(TermMode::KITTY_KEYBOARD_PROTOCOL | TermMode::MOUSE_MODE)
+                );
+                assert!(view.session.as_ref().unwrap().term.lock().nebula_shell_input_screen());
+            }
+        });
+    }
+}
+
+#[gpui::test]
+fn shell_return_before_the_watchdog_recovers_before_runtime_key_encoding(cx: &mut TestAppContext) {
+    let (view, window, receiver) = open(cx);
+    view.update(window, |view, cx| {
+        let (_, _, _, proxy) = session::test_session_with_events();
+        view.suggest.suggest_env =
+            crate::display::SuggestEnv::Ssh { destination: "fish.test".into() };
+        view.session.as_ref().unwrap().term.lock().set_options(nebula_terminal::term::Config {
+            kitty_keyboard: true,
+            ..Default::default()
+        });
+        screen(view, "user@host:~$ claude");
+        view.suggest.line_buf = "claude".into();
+        view.commit_line(cx);
+        let mut stream = nebula_terminal::event_loop::StreamProcessor::default();
+        stream.feed(
+            &mut view.session.as_ref().unwrap().term.lock(),
+            &proxy,
+            b"\x1b[>31u\x1b[?1000h\x1b[?1006h\r\x1b[2Kuser@host:~$ ",
+        );
+        // No explicit refresh_agent_screen_state tick or UI output event.
+        view.runtime_send_key(
+            crate::runtime_api::RuntimeKey::Backspace,
+            crate::runtime_api::RuntimeKeyModifiers { control: true, ..Default::default() },
+            1,
+            cx,
+        )
+        .unwrap();
+        assert!(
+            matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x08")
+        );
+        assert!(
+            !view.term_mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL | TermMode::MOUSE_MODE)
+        );
+    });
+}
+
+#[gpui::test]
+fn a_failed_native_input_recovery_keeps_the_prompt_evidence_for_retry(cx: &mut TestAppContext) {
+    let (view, window, _) = open(cx);
+    view.update(window, |view, cx| {
+        view.suggest.pending_command_prompt = Some("C:\\work>".into());
+        view.capture_input_protocol();
+        view.mark_command_running();
+        view.native_prompt_seen = true;
+        view.native_prompt_epoch = Some(view.prompt_input_epoch);
+        let root = crate::process_tree::ProcessEntry {
+            pid: 1,
+            parent_pid: 0,
+            depth: 0,
+            executable: "cmd.exe".into(),
+        };
+        view.apply_prompt_process_probe_with_lease(
+            view.command_started,
+            view.prompt_input_epoch,
+            None,
+            Ok(vec![root]),
+            cx,
+        );
+        assert_eq!(
+            view.native_prompt_epoch,
+            Some(view.prompt_input_epoch),
+            "failed recovery must retain the marker"
+        );
+        assert!(view.command_running);
+    });
+}
+
+#[gpui::test]
+fn runtime_protocol_recovery_does_not_consume_an_echo_barrier_on_control_only_output(
+    cx: &mut TestAppContext,
+) {
+    let (view, window, receiver) = open(cx);
+    view.update(window, |view, cx| {
+        let (_, _, _, proxy) = session::test_session_with_events();
+        view.suggest.suggest_env =
+            crate::display::SuggestEnv::Ssh { destination: "fish.test".into() };
+        screen(view, "user@host:~$ ");
+        view.runtime_prompt("claude".into(), true, cx).unwrap();
+        assert!(
+            view.input_protocol.is_some(),
+            "runtime submission captures its confirmed idle prompt"
+        );
+        assert!(
+            matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"claude")
+        );
+        let mut stream = nebula_terminal::event_loop::StreamProcessor::default();
+        stream.feed(&mut view.session.as_ref().unwrap().term.lock(), &proxy, b"\x1b[?1006h");
+        view.process_event(TermEvent::Wakeup, cx);
+        assert!(
+            view.pending_runtime_submit.is_some(),
+            "control-only output is not the submitted command returning"
+        );
+        assert!(receiver.try_recv().is_err());
+        stream.feed(&mut view.session.as_ref().unwrap().term.lock(), &proxy, b"claude");
+        view.process_event(TermEvent::Wakeup, cx);
+        assert!(
+            matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\r")
+        );
+    });
+}
+
+#[gpui::test]
+fn protocol_recovery_does_not_reset_new_negotiation_or_a_pre_echo_prompt(cx: &mut TestAppContext) {
+    let (view, window, _) = open(cx);
+    view.update(window, |view, cx| {
+        let (session, _, _, proxy) = session::test_session_with_events();
+        view.session = Some(session);
+        view.suggest.suggest_env =
+            crate::display::SuggestEnv::Ssh { destination: "fish.test".into() };
+        screen(view, "user@host:~$ ");
+        view.suggest.pending_command_prompt = Some("user@host:~$".into());
+        view.capture_input_protocol();
+        view.input_protocol_owner_exited();
+        assert!(!view.recover_input_protocol_at_prompt(), "no new output, no shell return");
+        view.session.as_ref().unwrap().term.lock().set_options(nebula_terminal::term::Config {
+            kitty_keyboard: true,
+            ..Default::default()
+        });
+        let mut stream = nebula_terminal::event_loop::StreamProcessor::default();
+        stream.feed(
+            &mut view.session.as_ref().unwrap().term.lock(),
+            &proxy,
+            b"\x1b]133;D;0\x07\x1b]133;C\x07\x1b[>31u\x1b[?1000h",
+        );
+        assert!(
+            !view.recover_input_protocol_at_prompt(),
+            "old SessionEnd cannot reset a new owner"
+        );
+        assert!(
+            view.term_mode()
+                .contains(TermMode::REPORT_ALL_KEYS_AS_ESC | TermMode::MOUSE_REPORT_CLICK)
+        );
+        view.clear_foreground_agent_state(cx); // delayed UI projection must not touch new modes
+        assert!(view.term_mode().contains(TermMode::REPORT_ALL_KEYS_AS_ESC));
+    });
+}
+
+#[gpui::test]
+fn local_protocol_recovery_rejects_output_arriving_during_a_process_probe(cx: &mut TestAppContext) {
+    let (view, window, _) = open(cx);
+    view.update(window, |view, cx| {
+        let (session, _, _, proxy) = session::test_session_with_events();
+        view.session = Some(session);
+        view.suggest.suggest_env = crate::display::SuggestEnv::Local;
+        screen(view, "user@host:~$ ");
+        view.suggest.pending_command_prompt = Some("user@host:~$".into());
+        view.capture_input_protocol();
+        view.mark_command_running();
+        view.session.as_ref().unwrap().term.lock().set_options(nebula_terminal::term::Config {
+            kitty_keyboard: true,
+            ..Default::default()
+        });
+        let stale = view.input_protocol_probe();
+        let mut stream = nebula_terminal::event_loop::StreamProcessor::default();
+        stream.feed(
+            &mut view.session.as_ref().unwrap().term.lock(),
+            &proxy,
+            b"\x1b[>31u\x1b[?1000h",
+        );
+        view.apply_prompt_process_probe_with_lease(
+            view.command_started,
+            view.prompt_input_epoch,
+            stale,
+            Ok(Vec::new()),
+            cx,
+        );
+        assert!(view.command_running);
+        assert!(view.term_mode().contains(TermMode::REPORT_ALL_KEYS_AS_ESC));
+        let fresh = view.input_protocol_probe();
+        view.apply_prompt_process_probe_with_lease(
+            view.command_started,
+            view.prompt_input_epoch,
+            fresh,
+            Ok(Vec::new()),
+            cx,
+        );
+        assert!(!view.command_running);
+        assert!(
+            !view.term_mode().intersects(TermMode::KITTY_KEYBOARD_PROTOCOL | TermMode::MOUSE_MODE)
+        );
+    });
+}
+
+#[gpui::test]
 fn pi_redraw_anchor_follows_accepted_hook_and_command_lifecycle(cx: &mut TestAppContext) {
     use nebula_terminal::term::test::TermSize;
     use nebula_terminal::vte::ansi::Processor;

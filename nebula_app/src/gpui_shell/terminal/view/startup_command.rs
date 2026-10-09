@@ -282,10 +282,11 @@ impl TerminalView {
             return true;
         }
         let Some(session) = &self.session else { return false };
-        crate::display::nebula_shell_ready_from_raw_grid(
+        crate::display::nebula_idle_prompt_from_raw_grid(
             &session.term.lock(),
             &self.suggest.suggest_env,
         )
+        .is_some()
     }
 
     pub(crate) fn can_retry_recovery(&self) -> bool {
@@ -315,10 +316,11 @@ impl TerminalView {
         let ready = {
             let term = session.term.lock();
             !term.mode().intersects(TermMode::ALT_SCREEN | TermMode::VI)
-                && crate::display::nebula_shell_ready_from_raw_grid(
+                && crate::display::nebula_idle_prompt_from_raw_grid(
                     &term,
                     &self.suggest.suggest_env,
                 )
+                .is_some()
         };
         if !ready {
             return;

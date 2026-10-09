@@ -201,30 +201,32 @@ pub(crate) fn nebula_prompt_line_from_raw_grid<T: EventListener>(
 
 /// Cold startup has no typed input mirror yet. Readiness is distinct from
 /// reconciling user keystrokes, which must continue to reject an empty mirror.
-pub(crate) fn nebula_shell_ready_from_raw_grid<T: EventListener>(
+pub(crate) fn nebula_idle_prompt_from_raw_grid<T: EventListener>(
     terminal: &Term<T>,
     env: &SuggestEnv,
-) -> bool {
+) -> Option<String> {
     if let Some(line) =
         nebula_prompt_line_from_raw_grid(terminal, terminal.grid().cursor.point, "", env)
     {
-        return line.input.trim().is_empty();
+        return line.input.trim().is_empty().then_some(line.prompt);
     }
     let Some(text) = raw_grid_logical_line(terminal, terminal.grid().cursor.point) else {
-        return false;
+        return None;
     };
     let prompt = text.trim_end();
-    let Some(marker) = prompt.chars().next_back() else { return false };
-    safe_shell_prompt_marker(prompt, marker, env)
-        && (terminal.nebula_prompt_active() || likely_prompt(prompt, marker, env))
+    let marker = prompt.chars().next_back()?;
+    let ready = safe_shell_prompt_marker(prompt, marker, env)
+        && (terminal.nebula_prompt_active() || likely_prompt(prompt, marker, env));
+    ready.then_some(text)
 }
 
 pub(crate) fn nebula_shell_prompt_restored_from_raw_grid<T: EventListener>(
     terminal: &Term<T>,
     expected_prompt: &str,
     env: &SuggestEnv,
+    owner_exited: bool,
 ) -> bool {
-    if terminal.mode().intersects(nebula_terminal::term::TermMode::ALT_SCREEN) {
+    if !owner_exited && terminal.mode().intersects(nebula_terminal::term::TermMode::ALT_SCREEN) {
         return false;
     }
     let cursor = terminal.grid().cursor.point;
@@ -531,7 +533,7 @@ mod tests {
                     assert_eq!(snapshot.prompt, prompt);
                     assert_eq!(snapshot.input, input);
                     assert_eq!(
-                        nebula_shell_ready_from_raw_grid(&terminal, &SuggestEnv::Local),
+                        nebula_idle_prompt_from_raw_grid(&terminal, &SuggestEnv::Local).is_some(),
                         input.is_empty()
                     );
                 }

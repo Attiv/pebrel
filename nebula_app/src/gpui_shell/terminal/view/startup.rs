@@ -299,6 +299,7 @@ impl TerminalView {
             last_process_probe: None,
             prompt_process_probe: None,
             prompt_input_epoch: 0,
+            input_protocol: None,
             native_prompt_seen: false,
             native_prompt_epoch: None,
             last_prompt_process_probe: None,

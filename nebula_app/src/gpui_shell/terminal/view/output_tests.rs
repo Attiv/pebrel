@@ -5,6 +5,38 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 #[gpui::test]
+fn ended_sessions_do_not_send_mouse_or_paste_protocol_input(cx: &mut TestAppContext) {
+    let (view, window, receiver) = open(cx);
+    for failed_ssh in [false, true] {
+        view.update(window, |view, cx| {
+            view.exited = None;
+            view.ssh_stage = None;
+            feed(view, b"\x1b[?1000h\x1b[?1006h");
+            if failed_ssh {
+                view.apply_ssh_stage(
+                    crate::ssh_session::SshStage::Failed("disconnected".into()),
+                    cx,
+                );
+            } else {
+                view.process_event(TermEvent::Exit, cx);
+            }
+            assert!(!view.mouse_mode_active(&gpui::Modifiers::default(), cx));
+            view.send_mouse_report(
+                gpui::point(px(10.0), px(10.0)),
+                0,
+                true,
+                &gpui::Modifiers::default(),
+            );
+            view.paste_now("ignored", cx);
+            assert!(
+                receiver.try_recv().is_err(),
+                "dead sessions must not receive mouse/paste bytes"
+            );
+        });
+    }
+}
+
+#[gpui::test]
 fn runtime_submission_codex_prompt_does_not_depend_on_a_repaint(cx: &mut TestAppContext) {
     let (view, window, receiver) = open(cx);
     view.update(window, |view, cx| {

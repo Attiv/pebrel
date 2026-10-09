@@ -118,7 +118,7 @@ impl TerminalView {
         self.suggest.pending_command_prompt = None;
         if let Some(session) = &self.session {
             let term = session.term.lock();
-            if !term.mode().intersects(TermMode::ALT_SCREEN | TermMode::VI) {
+            if term.nebula_shell_input_screen() && !term.mode().contains(TermMode::VI) {
                 let cursor = term.grid().cursor.point;
                 match crate::display::nebula_prompt_line_from_raw_grid(
                     &term,
@@ -159,6 +159,7 @@ impl TerminalView {
     }
 
     fn mark_submitted_command(&mut self, native_submission: bool) {
+        self.capture_input_protocol();
         if native_submission && self.command_running {
             // 前一条的进程检查可能尚未返回；保留外层 Runtime run，
             // 但下一次提交必须使旧命令/输入的异步结果失效。
@@ -209,16 +210,15 @@ impl TerminalView {
         }
         let Some(session) = &self.session else { return };
         let term = session.term.lock();
-        if term.mode().intersects(TermMode::ALT_SCREEN | TermMode::VI) {
+        if !term.nebula_shell_input_screen() || term.mode().contains(TermMode::VI) {
             return;
         }
-        if let Some(line) = crate::display::nebula_prompt_line_from_raw_grid(
-            &term,
-            term.grid().cursor.point,
-            "",
-            &self.suggest.suggest_env,
-        ) {
-            self.suggest.pending_command_prompt = Some(line.prompt);
+        if let Some(prompt) =
+            crate::display::nebula_idle_prompt_from_raw_grid(&term, &self.suggest.suggest_env)
+        {
+            self.suggest.pending_command_prompt = Some(prompt);
+            drop(term);
+            self.capture_input_protocol();
         }
     }
 

@@ -281,7 +281,7 @@ fn run_native_completion_fixture(editor_only: bool) {
                 if demo.is_some() {
                     wait_for(cx, window.into(), &terminal, |view| view.session.as_ref().is_some_and(|session| {
                         let term = session.term.lock();
-                        crate::display::nebula_shell_ready_from_raw_grid(&term, &view.suggest.suggest_env)
+                        crate::display::nebula_idle_prompt_from_raw_grid(&term, &view.suggest.suggest_env).is_some()
                     })).await?;
                     std::fs::write(output.join("ready"), b"ready").map_err(|e| e.to_string())?;
                     for _ in 0..600 {
@@ -387,7 +387,7 @@ fn run_native_completion_fixture(editor_only: bool) {
                 } else if demo.as_deref() == Some("history") {
                     wait_for(cx, window.into(), &terminal, |view| view.session.as_ref().is_some_and(|session| {
                         let term = session.term.lock();
-                        crate::display::nebula_shell_ready_from_raw_grid(&term, &view.suggest.suggest_env)
+                        crate::display::nebula_idle_prompt_from_raw_grid(&term, &view.suggest.suggest_env).is_some()
                     })).await?;
                     type_demo_line(cx, window.into(), &terminal, "echo deployment finished").await?;
                     cx.update_window(window.into(), |_, window, cx| terminal.update(cx, |view, cx| {
@@ -417,7 +417,7 @@ fn run_native_completion_fixture(editor_only: bool) {
                     }
                     wait_for(cx, window.into(), &terminal, |view| view.session.as_ref().is_some_and(|session| {
                         let term = session.term.lock();
-                        crate::display::nebula_shell_ready_from_raw_grid(&term, &view.suggest.suggest_env)
+                        crate::display::nebula_idle_prompt_from_raw_grid(&term, &view.suggest.suggest_env).is_some()
                     })).await?;
                     cx.update_window(window.into(), |_, window, cx| terminal.update(cx, |view, cx| {
                         view.completion_style = mode;
@@ -503,7 +503,7 @@ fn run_native_completion_fixture(editor_only: bool) {
                         // 只等实际命令结束，不为录制安排人为停顿。
                         wait_for(cx, window.into(), &terminal, |view| view.session.as_ref().is_some_and(|session| {
                             let term = session.term.lock();
-                            crate::display::nebula_shell_ready_from_raw_grid(&term, &view.suggest.suggest_env)
+                            crate::display::nebula_idle_prompt_from_raw_grid(&term, &view.suggest.suggest_env).is_some()
                         })).await?;
                     }
                 }
