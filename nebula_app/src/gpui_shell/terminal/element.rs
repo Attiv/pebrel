@@ -39,6 +39,16 @@ pub(super) use color_resolution::{rgb_from_rgba, rgba_rgb};
 mod codex_emphasis;
 use codex_emphasis::{CodexSummaryPalette, classify_codex_summary_rows, paint_codex_markers};
 
+#[path = "element/label_badges.rs"]
+mod label_badges;
+#[path = "element/label_badges_classifier.rs"]
+mod label_badges_classifier;
+#[path = "element/label_badges_snapshot.rs"]
+mod label_badges_snapshot;
+use label_badges::{LabelPalette, badge_provider, paint_label_badges};
+use label_badges_classifier::{Label, LabelKind};
+use label_badges_snapshot::classify_badge_rows;
+
 #[cfg(test)]
 #[path = "element/color_tests.rs"]
 mod color_tests;
@@ -347,8 +357,13 @@ impl Element for TerminalElement {
         });
         let overrides = snap.color_overrides;
         self.resolve_app_colors(&mut snap, &mut dashed, &theme, &overrides, cx);
-        let is_codex =
-            self.view.read(cx).runtime_agent().is_some_and(|agent| agent.kind == "codex");
+        let agent = self.view.read(cx).runtime_agent();
+        let is_codex = agent.as_ref().is_some_and(|agent| agent.kind == "codex");
+        let labels_enabled = cx
+            .try_global::<crate::gpui_shell::config::Settings>()
+            .is_some_and(|settings| settings.terminal_label_badges);
+        let badge_agent = badge_provider(self.view.read(cx), labels_enabled);
+        let label_palette = labels_enabled.then(|| LabelPalette::new(&theme));
         let codex_summary_rows = classify_codex_summary_rows(&snap, is_codex);
         let codex_palette = CodexSummaryPalette::new(&theme);
         let (theme_anchor, theme_is_light) = themed_anchor(&theme, cx);
@@ -397,6 +412,28 @@ impl Element for TerminalElement {
             .view
             .update(cx, |view, cx| view.math.finalize_frame(pending_math_frame, scale_factor, cx));
 
+        let label_rows = classify_badge_rows(
+            &snap,
+            labels_enabled,
+            badge_agent.as_ref().map(|agent| agent.kind.as_str()),
+            |row| {
+                codex_summary_rows.get(row as usize).copied().flatten().map(|summary| Label {
+                    start: summary.heading_start,
+                    end: summary.heading_end,
+                    kind: if summary.kind == codex_emphasis::CodexSummaryKind::Failure {
+                        LabelKind::Failure
+                    } else {
+                        LabelKind::Tool
+                    },
+                })
+            },
+            |row, col| {
+                math_frame.covers(row as usize, col as usize)
+                    || math_frame.project_cell(row as usize, col as usize, layout.cols)
+                        != Some(col as usize)
+                    || dashed.contains_key(&(row, col))
+            },
+        );
         let cell_rect = |row: usize, start: usize, count: usize| -> Bounds<Pixels> {
             Bounds::new(
                 point(
@@ -515,13 +552,25 @@ impl Element for TerminalElement {
             }
             paint(run.start, run.end, run.color);
         }
+        if let Some(palette) = &label_palette {
+            paint_label_badges(
+                &label_rows,
+                palette,
+                window,
+                |row| cell_rect(row as usize, 0, 1),
+                layout.cell_width,
+            );
+        }
         paint_codex_markers(
             &codex_summary_rows,
             &snap,
             window,
             |row| cell_rect(row as usize, 0, 1),
             |kind| codex_palette.color(kind),
-            |row| math_frame.covers(row as usize, 0),
+            |row| {
+                math_frame.covers(row as usize, 0)
+                    || label_rows.get(row as usize).is_some_and(Option::is_some)
+            },
         );
         let selection_fill = if is_default_selection(&theme) {
             let alpha = if theme_is_light {
@@ -675,7 +724,12 @@ impl Element for TerminalElement {
         // 连字仅合并同一行内同样式的窄 ASCII 格，光标、选区和公式
         // 投影边界仍逐格裁定。字形簇的原点始终由固定网格决定。
         for seg in &snap.segments {
-            let summary = codex_summary_rows.get(seg.row as usize).copied().flatten();
+            let badge = label_rows.get(seg.row as usize).copied().flatten();
+            let summary = codex_summary_rows
+                .get(seg.row as usize)
+                .copied()
+                .flatten()
+                .filter(|_| badge.is_none());
             let mut cells = seg.cells.as_slice();
             while let Some(cell) = cells.first() {
                 let remaining = cells;
@@ -691,8 +745,11 @@ impl Element for TerminalElement {
                     continue;
                 };
                 let emphasized = summary.is_some_and(|row| row.emphasizes_cell(cell));
+                let badged = badge.is_some_and(|label| label.contains(cell.col));
                 let fg: Hsla = if let Some(foreground) = selected_foreground(seg.row, cell.col) {
                     foreground.into()
+                } else if badged {
+                    label_palette.as_ref().unwrap().colors(badge.unwrap().kind).foreground.into()
                 } else if emphasized {
                     rgba_rgb(codex_palette.color(summary.unwrap().kind), 1.0).into()
                 } else {
@@ -709,7 +766,7 @@ impl Element for TerminalElement {
                     .then(|| gpui::StrikethroughStyle { thickness: px(1.0), color: Some(fg) });
                 let run = TextRun {
                     len: cell.text.len(),
-                    font: pick_font(cell.bold || emphasized, cell.italic, seg.wide),
+                    font: pick_font(cell.bold || emphasized || badged, cell.italic, seg.wide),
                     color: fg,
                     background_color: None,
                     underline,
@@ -730,6 +787,7 @@ impl Element for TerminalElement {
                             && selected_foreground(seg.row, next.col)
                                 == selected_foreground(seg.row, cell.col)
                             && summary.is_some_and(|row| row.emphasizes_cell(next)) == emphasized
+                            && badge.is_some_and(|label| label.contains(next.col)) == badged
                             && !dashed.contains_key(&(seg.row, next.col))
                     })
                 } else {

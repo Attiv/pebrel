@@ -1,6 +1,103 @@
 use super::*;
 
 #[test]
+fn reopen_default_and_custom_binding_leave_input_and_file_editor_undo_untouched() {
+    use gpui::{KeyContext, Keymap, Keystroke};
+    let action = crate::display::keymap::parse_action("ReopenClosedTab")
+        .expect("the restore action must support existing custom keybinds");
+    for combo in ["cmd+z", "ctrl+alt+z"] {
+        let reopen = custom_workspace_binding(combo, &action).unwrap();
+        let combo = gpui_binding_combo(combo);
+        let mut bindings = vec![reopen];
+        for context in ["Input", "FileEditor"] {
+            bindings.push(KeyBinding::new(&combo, gpui_component::input::Undo, Some(context)));
+        }
+        let keymap = Keymap::new(bindings);
+        for leaf in ["NebulaTerminal", "NebulaWorkspace", "Input", "FileEditor"] {
+            let contexts = if leaf == "NebulaWorkspace" {
+                vec![KeyContext::parse(leaf).unwrap()]
+            } else {
+                vec![
+                    KeyContext::parse("NebulaWorkspace").unwrap(),
+                    KeyContext::parse(leaf).unwrap(),
+                ]
+            };
+            let input = [Keystroke::parse(&combo).unwrap()];
+            let (bindings, pending) = keymap.bindings_for_input(&input, &contexts);
+            assert!(!pending);
+            let binding = bindings.first().expect("key must have its scoped action");
+            if matches!(leaf, "Input" | "FileEditor") {
+                assert!(binding.action().as_any().is::<gpui_component::input::Undo>());
+                assert!(
+                    bindings
+                        .iter()
+                        .all(|binding| !binding.action().name().ends_with("ReopenClosedTab"))
+                );
+            } else {
+                assert!(binding.action().name().ends_with("ReopenClosedTab"));
+            }
+        }
+    }
+}
+
+#[test]
+fn released_custom_reopen_shortcuts_preserve_native_input_and_file_editor_actions() {
+    use crate::{config::Action, display::keymap};
+    use gpui::{KeyContext, Keymap, Keystroke};
+    for combo in ["cmd+shift+z", "ctrl+z"] {
+        for rebind in [false, true] {
+            let mut raw = Vec::new();
+            keymap::rebind_action(&mut raw, &Action::ReopenClosedTab, combo.into());
+            if rebind {
+                keymap::rebind_action(&mut raw, &Action::ReopenClosedTab, "ctrl+alt+r".into());
+            } else {
+                keymap::clear_action(&mut raw, &Action::ReopenClosedTab);
+            }
+            let runtime_combo = gpui_binding_combo(combo);
+            let mut bindings = Vec::new();
+            for context in ["Input", "FileEditor"] {
+                bindings.push(KeyBinding::new(
+                    &runtime_combo,
+                    gpui_component::input::Undo,
+                    Some(context),
+                ));
+            }
+            for (key, action) in raw {
+                let action = keymap::parse_action(&action).unwrap();
+                for scope in [None, Some(crate::gpui_shell::terminal::KEY_CONTEXT)] {
+                    bindings.push(workspace_binding_in_context(&key, &action, scope).unwrap());
+                }
+            }
+            let keymap = Keymap::new(bindings);
+            for leaf in ["Input", "FileEditor", "NebulaTerminal"] {
+                let contexts = [
+                    KeyContext::parse("NebulaWorkspace").unwrap(),
+                    KeyContext::parse(leaf).unwrap(),
+                ];
+                let (bindings, pending) = keymap
+                    .bindings_for_input(&[Keystroke::parse(&runtime_combo).unwrap()], &contexts);
+                assert!(!pending);
+                if leaf == "NebulaTerminal" {
+                    assert!(
+                        bindings.is_empty(),
+                        "released shortcut must pass through to terminal input"
+                    );
+                } else {
+                    assert!(
+                        bindings.first().is_some_and(|binding| binding
+                            .action()
+                            .as_any()
+                            .is::<gpui_component::input::Undo>(
+                        )),
+                        "release must preserve {leaf} native text action for {combo}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn command_aliases_and_modifier_order_share_one_runtime_identity() {
     let expected = gpui_binding_combo("shift+cmd+k");
     for combo in ["Shift+Win+K", "cmd+shift+k", "super+shift+k"] {
@@ -234,6 +331,71 @@ mod dispatch {
     }
 
     #[gpui::test]
+    fn command_z_reopens_closed_file_at_original_index_with_metadata(cx: &mut TestAppContext) {
+        if crate::platform::Platform::current() != crate::platform::Platform::MacOS {
+            return;
+        }
+        let _settings_lock = crate::gpui_shell::settings_fixture::lock_theme_studio();
+        let (_directory, workspace, mut cx) = open_workspace(2, cx);
+        cx.update(|window, cx| {
+            workspace.update(cx, |workspace, cx| {
+                workspace.add_terminal_with(
+                    crate::session::LaunchSession::Shell {
+                        name: "Undo fixture".into(),
+                        program: "pebrel-test-missing-undo-shell".into(),
+                        args: Vec::new(),
+                    },
+                    None,
+                    None,
+                    window,
+                    cx,
+                );
+                workspace.tab_meta[0].custom_name = Some("Closed fixture".into());
+                workspace.tab_meta[0].color = Some(Rgb::new(23, 45, 67));
+                workspace.close_tab(0, window, cx);
+            });
+        });
+        cx.run_until_parked();
+        press("cmd-z", &mut cx);
+        workspace.read_with(&cx, |workspace, cx| {
+            assert_eq!(workspace.tabs.len(), 3, "Command-Z must reopen the closed tab");
+            assert_eq!(workspace.active, 0);
+            assert_eq!(workspace.tab_meta[0].custom_name.as_deref(), Some("Closed fixture"));
+            assert_eq!(workspace.tab_meta[0].color, Some(Rgb::new(23, 45, 67)));
+            let WorkspaceTab::Code { view, .. } = &workspace.tabs[0] else {
+                panic!("expected restored code tab");
+            };
+            assert_eq!(view.read(cx).path.file_name().unwrap(), "tab-0.txt");
+        });
+    }
+
+    #[gpui::test]
+    fn clearing_custom_reopen_preserves_real_document_undo_and_redo(cx: &mut TestAppContext) {
+        let _settings_lock = crate::gpui_shell::settings_fixture::lock_theme_studio();
+        let (_directory, workspace, mut cx) = open_workspace(1, cx);
+        let modifier = if crate::platform::Platform::current() == crate::platform::Platform::MacOS { "cmd" } else { "ctrl" };
+        press(&format!("{modifier}-/"), &mut cx);
+        press(&format!("{modifier}-a"), &mut cx);
+        cx.simulate_input("Changed");
+        cx.run_until_parked();
+        let file =
+            workspace.read_with(&cx, |workspace, cx| workspace.tabs[0].file_editor(cx).unwrap());
+        let mut raw = Vec::new();
+        crate::display::keymap::rebind_action(
+            &mut raw,
+            &crate::config::Action::ReopenClosedTab,
+            format!("{modifier}+shift+z"),
+        );
+        workspace.update(&mut cx, |workspace, cx| workspace.update_keybinds(raw.clone(), cx));
+        crate::display::keymap::clear_action(&mut raw, &crate::config::Action::ReopenClosedTab);
+        workspace.update(&mut cx, |workspace, cx| workspace.update_keybinds(raw, cx));
+        press(&format!("{modifier}-z"), &mut cx);
+        assert_eq!(file.read_with(&cx, |view, cx| view.draft(cx)), "fixture\n");
+        press(&format!("{modifier}-shift-z"), &mut cx);
+        assert_eq!(file.read_with(&cx, |view, cx| view.draft(cx)), "Changed");
+    }
+
+    #[gpui::test]
     fn command_shortcut_registration_follows_runtime_platform(cx: &mut TestAppContext) {
         let (_directory, workspace, mut cx) = open_workspace(1, cx);
         press("cmd-k", &mut cx);
@@ -283,8 +445,10 @@ mod dispatch {
     }
 
     #[gpui::test]
-    #[cfg(target_os = "macos")]
     fn recorded_command_key_can_restore_default(cx: &mut TestAppContext) {
+        if crate::platform::Platform::current() != crate::platform::Platform::MacOS {
+            return;
+        }
         use crate::display::keymap;
         let (_directory, workspace, mut cx) = open_workspace(1, cx);
         press("cmd-k", &mut cx);

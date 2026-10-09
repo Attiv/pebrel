@@ -403,7 +403,11 @@ impl SettingsPane {
         }
         if matches!(
             key,
-            "ai_toasts" | "focus_follows_mouse" | "dim_inactive_panes" | "refresh_environment"
+            "ai_toasts"
+                | "focus_follows_mouse"
+                | "dim_inactive_panes"
+                | "refresh_environment"
+                | "terminal_label_badges"
         ) {
             if let Err(error) = self.try_persist(&[(key, (value as u8).to_string())], cx) {
                 let language = crate::gpui_shell::config::ui_language(cx);
@@ -776,6 +780,7 @@ impl SettingsPane {
             "ghost" => flag!(ghost),
             "ai_toasts" => flag!(ai_toasts),
             "ctrl_wheel_font_zoom" => flag!(ctrl_wheel_font_zoom),
+            "terminal_label_badges" => flag!(terminal_label_badges),
             "notification_duration" => pick!(notification_duration),
             "cursor_motion" => pick!(cursor_motion),
             "cjk_bold_regular" => flag!(cjk_bold_regular),

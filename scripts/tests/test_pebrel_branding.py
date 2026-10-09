@@ -32,7 +32,7 @@ class PebrelBrandingTests(unittest.TestCase):
         window = self.source("nebula_app/src/config/window.rs")
         self.assertIn('DEFAULT_NAME: &str = crate::brand::NAME;', window)
         self.assertIn('DEFAULT_CLASS: &str = "Pebrel";', window)
-        gpui = self.source("nebula_app/src/gpui_shell/workspace/windowing.rs")
+        gpui = self.source("nebula_app/src/gpui_shell/workspace/windowing.rs") + self.source("nebula_app/src/gpui_shell/workspace/windowing/startup_geometry.rs")
         self.assertIn('window.set_window_title(crate::brand::NAME)', gpui)
         self.assertIn('app_id: Some("pebrel".to_owned())', gpui)
         self.assertIn('app_id: Some("pebrel-quick-terminal".to_owned())', gpui)

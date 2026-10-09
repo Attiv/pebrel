@@ -45,6 +45,7 @@ pub(crate) const EDITABLE_ACTIONS: &[(Action, &str, &str)] = &[
     // -- 标签页 --
     (Action::CreateNewTab, "新建标签页", "New tab"),
     (Action::CloseTab, "关闭标签页 / 分屏", "Close tab / pane"),
+    (Action::ReopenClosedTab, "", ""),
     (Action::RenameTab, "重命名标签页", "Rename tab"),
     (Action::SelectNextTab, "下一个标签页", "Next tab"),
     (Action::SelectPreviousTab, "上一个标签页", "Previous tab"),
@@ -75,7 +76,7 @@ pub(crate) const EDITABLE_ACTIONS: &[(Action, &str, &str)] = &[
 /// `usize` 是本组行数；区间连续覆盖全部可编辑行（含第 0 行快速终端）。
 pub(crate) const GROUPS: &[(&str, &str, usize)] = &[
     ("全局", "Global", 6),
-    ("标签页", "Tabs", 5),
+    ("标签页", "Tabs", 6),
     ("窗格", "Panes", 7),
     ("侧栏面板", "Side panels", 2),
     ("终端", "Terminal", 9),
@@ -118,6 +119,7 @@ pub(crate) const MACOS_COMMAND_ALIASES: &[(&str, Action)] = &[
     // ⌘W 关标签页是 GPUI 壳的实际行为；配置表的 macOS 段把 ⌘W 记作 Quit，
     // 这里必须压过它，否则解绑恢复会把 ⌘W 还给退出。
     ("cmd+w", Action::CloseTab),
+    ("cmd+z", Action::ReopenClosedTab),
     ("shift+cmd+p", Action::ToggleCommandPalette),
     ("cmd+k", Action::ToggleShellPicker),
     ("shift+cmd+f", Action::ToggleFilesPanel),
@@ -148,6 +150,8 @@ pub(crate) fn action_label(
 ) -> &'static str {
     if row.0 == Action::RenameTab {
         language.text(crate::i18n::Message::CommonRenameTab)
+    } else if row.0 == Action::ReopenClosedTab {
+        language.text(crate::i18n::Message::CommonReopenClosedTab)
     } else {
         language.pick(row.1, row.2)
     }
@@ -156,6 +160,31 @@ pub(crate) fn action_label(
 #[cfg(test)]
 mod group_tests {
     use super::*;
+
+    #[test]
+    fn command_z_reopen_is_in_the_shared_alias_authority() {
+        let action = MACOS_COMMAND_ALIASES.iter().find(|(combo, _)| *combo == "cmd+z");
+        assert!(action.is_some(), "Reopen must participate in override/reset policy");
+        assert_eq!(format!("{:?}", action.unwrap().1), "ReopenClosedTab");
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn reopen_default_key_is_displayed_and_can_be_released_and_reset() {
+        assert_eq!(
+            effective_combo(&Action::ReopenClosedTab, &[]),
+            Some(("Command+Z".into(), false))
+        );
+        let mut raw = Vec::new();
+        clear_action(&mut raw, &Action::ReopenClosedTab);
+        assert_eq!(effective_combo(&Action::ReopenClosedTab, &build_bindings(&raw)), None);
+        reset_action(&mut raw, &Action::ReopenClosedTab);
+        assert!(raw.is_empty());
+        assert_eq!(
+            effective_combo(&Action::ReopenClosedTab, &[]),
+            Some(("Command+Z".into(), false))
+        );
+    }
 
     #[test]
     fn groups_cover_every_editable_row_exactly_once() {
@@ -511,6 +540,21 @@ pub(crate) fn effective_combo(action: &Action, custom: &[KeyBinding]) -> Option<
     let shadowed = |candidate: &KeyBinding| {
         custom.iter().any(|b| b.trigger == candidate.trigger && b.mods == candidate.mods)
     };
+    // Reopen is a GPUI workspace action with no legacy Ctrl default. Its
+    // native macOS alias still needs truthful display, conflict and reset UI.
+    #[cfg(target_os = "macos")]
+    if *action == Action::ReopenClosedTab {
+        return MACOS_COMMAND_ALIASES.iter().find_map(|(combo, candidate)| {
+            if candidate != action {
+                return None;
+            }
+            let (mods, trigger) = parse_combo(combo)?;
+            if custom.iter().any(|binding| binding.mods == mods && binding.trigger == trigger) {
+                return None;
+            }
+            display_combo(mods, &trigger).map(|text| (text, false))
+        });
+    }
     cached_defaults()
         .iter()
         .rev()

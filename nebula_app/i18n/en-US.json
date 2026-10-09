@@ -128,6 +128,8 @@
       }
     },
     "appearance": {
+      "terminal_label_badges": "Rounded terminal labels",
+      "terminal_label_badges_description": "Highlight structured INFO/WARN/ERROR log labels and Codex/Claude Code tool headings. Applies immediately; original text and copied content stay unchanged.",
       "background_color_description": "Overrides the terminal background supplied by the theme. This also changes the color reported to applications by OSC 11, which TUIs use to choose light or dark mode.",
       "background_cover_title": "Extend the background image beneath window controls?",
       "background_cover_description": "The image will extend beneath the title bar, window buttons, tabs, and SSH sidebar. Low-contrast images may make controls harder to see; the interface retains a minimum-opacity safeguard."
@@ -244,6 +246,7 @@
     }
   },
   "common": {
+    "reopen_closed_tab": "Reopen closed tab",
     "link_command_click": "Command+left click to open",
     "link_ctrl_click": "Ctrl+left click to open",
     "settings": "Settings",
@@ -1068,6 +1071,8 @@
     "settings_shortcut": "Settings (Ctrl+,)"
   },
   "workspace": {
+    "tab_restore_failed": "Could not reopen the closed tab",
+    "tab_restore_unsupported": "This temporary or remote tab cannot be reopened",
     "pane": {
       "rename_hint": "Double-click to rename; Enter or click outside to save, Esc to cancel. Clear for an automatic title. Reopen to undo a saved name.",
       "stop_broadcast_input": "Stop broadcasting input",

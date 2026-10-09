@@ -88,6 +88,7 @@ impl NebulaWorkspace {
         if !self.settings_tab_open {
             return;
         }
+        self.remember_settings_closed();
         self.settings_tab_open = false;
         self.leave_settings(window, cx);
         self.reveal_active_tab();

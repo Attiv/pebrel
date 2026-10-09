@@ -18,6 +18,7 @@ const RESET_KEYS: &[&str] = &[
     "font_size",
     "ctrl_wheel_font_zoom",
     "ligatures",
+    "terminal_label_badges",
     "cursor_shape",
     "cursor_blink",
     "cursor_motion",
@@ -158,6 +159,19 @@ mod tests {
         for agent in crate::AgentHook::ALL {
             assert_eq!(agent.enabled(&original), agent.enabled(&restored));
         }
+    }
+
+    #[test]
+    fn reset_disables_terminal_label_badges_and_preserves_hook_authorization() {
+        let restored = default_settings_text(
+            "terminal_label_badges=1\nai_hooks_codex=0\nai_hooks_claude=1\ncustom=keep\n",
+        );
+        assert!(!restored.contains("terminal_label_badges="));
+        let raw = RawSettings::from_text(&restored);
+        assert!(!RuntimeSettings::from_raw(&raw).terminal_label_badges);
+        assert_eq!(raw.bool_on("ai_hooks_codex"), Some(false));
+        assert_eq!(raw.bool_on("ai_hooks_claude"), Some(true));
+        assert!(restored.contains("custom=keep"));
     }
 
     #[test]

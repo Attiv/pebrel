@@ -71,6 +71,8 @@ impl Render for NebulaWorkspace {
             .map(|area| (area.x, area.y, area.w, area.h));
 
         div()
+            .key_context(tab_undo::KEY_CONTEXT)
+            .track_focus(&self.tab_focus)
             .size_full()
             .flex()
             .flex_col()
@@ -147,6 +149,11 @@ impl Render for NebulaWorkspace {
                         log::warn!("failed to open GPUI window: {error}");
                     }
                 });
+            }))
+            .on_action(cx.listener(|this, _: &ReopenClosedTab, window, cx| {
+                if !this.reopen_closed_tab(window, cx) {
+                    cx.propagate();
+                }
             }))
             .on_action(cx.listener(|this, _: &CloseActiveTerminal, window, cx| {
                 this.close_active(window, cx);

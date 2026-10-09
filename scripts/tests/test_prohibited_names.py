@@ -313,7 +313,7 @@ class ProhibitedNamesTests(unittest.TestCase):
             run_git(repository, "commit", "-qm", "baseline")
             base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repository, text=True).strip()
 
-            run_git(repository, "branch", "main")
+            run_git(repository, "branch", "-M", "main")
             run_git(repository, "switch", "main")
             (repository / "README.md").write_text("safe on main\n", encoding="utf-8")
             run_git(repository, "add", "README.md")
@@ -372,7 +372,7 @@ class ProhibitedNamesTests(unittest.TestCase):
             (repository / "shared.md").write_text("base\n", encoding="utf-8")
             run_git(repository, "add", "shared.md")
             run_git(repository, "commit", "-qm", "baseline")
-            run_git(repository, "branch", "main")
+            run_git(repository, "branch", "-M", "main")
 
             run_git(repository, "switch", "-c", "feature")
             (repository / "shared.md").write_text("feature\n", encoding="utf-8")

@@ -148,9 +148,15 @@ impl NebulaWorkspace {
         copy_launch(launch, CopyKind::NewTab, PaneOrigin::of(view.read(cx)))
     }
 
-    pub(super) fn duplicate_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    /// Restart descriptors share launch, guest directory and split ownership rules.
+    pub(super) fn snapshot_terminal_for_restart(
+        &self,
+        ix: usize,
+        preserve_agent: bool,
+        cx: &gpui::App,
+    ) -> Option<TabSession> {
         let Some(WorkspaceTab::Terminal { panes, tree, focused, .. }) = self.tabs.get(ix) else {
-            return;
+            return None;
         };
         let meta = self.meta(ix);
         let layout = crate::gpui_shell::session_restore::layout_from_tree(tree, &|id| {
@@ -175,16 +181,25 @@ impl NebulaWorkspace {
                 }
                 view.cwd.clone()
             };
-            (cwd, None, Some(launch), pane.custom_name.clone())
+            (
+                cwd,
+                preserve_agent.then(|| view.session_agent()).flatten(),
+                Some(launch),
+                pane.custom_name.clone(),
+            )
         });
-        let duplicate = TabSession {
+        Some(TabSession {
             cwd: String::new(),
             custom_name: meta.custom_name,
             color: meta.color,
             launch: meta.launch,
             active_pane: tree.leaves().iter().position(|id| id == focused).unwrap_or(0),
             layout: Some(layout),
-        };
+        })
+    }
+
+    pub(super) fn duplicate_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(duplicate) = self.snapshot_terminal_for_restart(ix, false, cx) else { return };
         if self.settings_open {
             self.leave_settings(window, cx);
         }

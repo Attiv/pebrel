@@ -1002,6 +1002,8 @@ pub struct RuntimeSettings {
     pub ctrl_wheel_font_zoom: bool,
     /// Enabled by default; explicit theme mode follows the selected theme.
     pub ligatures: Ligatures,
+    /// Cosmetic log/Agent label badges; opt-in and applied to open terminals.
+    pub terminal_label_badges: bool,
     pub cursor_shape: Option<CursorShapeName>,
     pub cursor_blink: Option<bool>,
     pub cursor_motion: CursorMotion,
@@ -1192,6 +1194,7 @@ impl RuntimeSettings {
             ui_font_size_px: raw.f32("ui_font_size").map(|size| size.clamp(10.0, 24.0)),
             font_size_px: raw.f32("font_size").map(|size| size.clamp(4.0, 96.0)),
             ctrl_wheel_font_zoom: raw.bool_on("ctrl_wheel_font_zoom").unwrap_or(true),
+            terminal_label_badges: raw.bool_on("terminal_label_badges").unwrap_or(false),
             ligatures: raw
                 .value("ligatures")
                 .and_then(Ligatures::from_settings)

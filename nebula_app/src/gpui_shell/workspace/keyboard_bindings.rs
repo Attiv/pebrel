@@ -214,6 +214,13 @@ fn workspace_binding_in_context(
 ) -> Option<KeyBinding> {
     use crate::config::Action;
     let combo = gpui_binding_combo(combo);
+    // This default belongs to tab/terminal chrome, including its NoAction
+    // override. A cleared/remapped Cmd-Z must not swallow native text Undo.
+    let scope = if *action == Action::ReopenClosedTab || combo == gpui_binding_combo("cmd+z") {
+        Some(tab_undo::REOPEN_KEY_CONTEXT)
+    } else {
+        scope
+    };
     if let Some(action) = SelectTab::from_config(action) {
         return Some(KeyBinding::new(&combo, action, scope));
     }
@@ -223,6 +230,7 @@ fn workspace_binding_in_context(
         Action::CreateNewTab => Some(KeyBinding::new(&combo, NewTerminal, scope)),
         Action::CreateNewWindow => Some(KeyBinding::new(&combo, NewWindow, scope)),
         Action::CloseTab => Some(KeyBinding::new(&combo, CloseActiveTerminal, scope)),
+        Action::ReopenClosedTab => Some(KeyBinding::new(&combo, ReopenClosedTab, scope)),
         Action::RenameTab => Some(KeyBinding::new(&combo, RenameActiveTab, scope)),
         Action::ToggleFilesPanel => Some(KeyBinding::new(&combo, ToggleFileTree, scope)),
         Action::ToggleGitPanel => Some(KeyBinding::new(&combo, ToggleGitPanel, scope)),

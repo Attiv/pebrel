@@ -128,6 +128,8 @@
       }
     },
     "appearance": {
+      "terminal_label_badges": "圆角终端标签",
+      "terminal_label_badges_description": "突出显示结构化 INFO/WARN/ERROR 日志标签及 Codex／Claude Code 工具标题。立即生效，不改变原文和复制内容。",
       "background_color_description": "覆盖主题自带的终端底色。改了它，OSC 11 上报给程序的背景色也跟着变——TUI 判断明暗模式靠的就是这个值。",
       "background_cover_title": "让背景图覆盖窗口控件区域？",
       "background_cover_description": "背景图会延伸到标题栏、窗口按钮、Tab 与 SSH 侧栏下方，低对比度图片可能影响操作可见性；界面仍会保留最低不透明度保护。"
@@ -244,6 +246,7 @@
     }
   },
   "common": {
+    "reopen_closed_tab": "重新打开已关闭标签页",
     "link_command_click": "Command+左键跳转",
     "link_ctrl_click": "Ctrl+左键跳转",
     "settings": "设置",
@@ -1068,6 +1071,8 @@
     "settings_shortcut": "设置 (Ctrl+,)"
   },
   "workspace": {
+    "tab_restore_failed": "无法重新打开已关闭标签页",
+    "tab_restore_unsupported": "无法重新打开此临时或远程标签页",
     "pane": {
       "rename_hint": "双击重命名；Enter 或点击外部保存，Esc 取消。清空恢复自动标题，重新编辑可撤销已保存的名称。",
       "stop_broadcast_input": "关闭广播输入",

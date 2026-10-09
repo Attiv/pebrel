@@ -287,6 +287,18 @@ mod tests {
     }
 
     #[test]
+    fn terminal_label_badges_search_keeps_agent_integration_routes_distinct() {
+        for language in [crate::display::UiLanguage::ZhCn, crate::display::UiLanguage::EnUs] {
+            for query in ["圆角", "badges", "日志"] {
+                assert_eq!(matching_sections(query, language), vec![1], "{query}");
+            }
+            for query in ["codex", "claude"] {
+                assert_eq!(matching_sections(query, language), vec![10], "{query}");
+            }
+        }
+    }
+
+    #[test]
     fn shader_and_media_search_find_the_appearance_controls() {
         for query in
             ["WGSL", "shader", "terminal effects", "终端效果", "着色器", "视频", "GIF", "动图"]

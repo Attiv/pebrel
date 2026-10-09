@@ -226,6 +226,9 @@ pub enum Action {
     /// Close the focused tab (or pane, when the tab is split).
     CloseTab,
 
+    /// Reopen the most recently closed workspace tab (GPUI shell only).
+    ReopenClosedTab,
+
     /// Rename the active tab.
     RenameTab,
 

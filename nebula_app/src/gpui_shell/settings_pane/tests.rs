@@ -2,6 +2,107 @@ use super::*;
 
 #[cfg(feature = "gpui-test-support")]
 #[gpui::test]
+fn terminal_label_badges_save_failure_stays_off_and_is_visible(cx: &mut gpui::TestAppContext) {
+    use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
+    use gpui_component::WindowExt as _;
+
+    struct BlockedSettingsPath(std::path::PathBuf);
+    impl Drop for BlockedSettingsPath {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir(&self.0);
+        }
+    }
+
+    let _fixture_guard = lock_theme_studio();
+    let _guard = SettingsBytesGuard::capture();
+    nebula_settings::persist_keys(&[("terminal_label_badges", "0".into())]).unwrap();
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut pane_out = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let pane = cx.new(|cx| SettingsPane::new(window, cx));
+        pane_out = Some(pane.clone());
+        gpui_component::Root::new(pane, window, cx)
+    });
+    let pane = pane_out.unwrap();
+    let path = nebula_settings::settings_path();
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let _blocked = BlockedSettingsPath(path);
+    cx.update(|window, cx| {
+        pane.update(cx, |pane, cx| pane.toggle("terminal_label_badges", true, window, cx));
+        assert!(!pane.read(cx).runtime.terminal_label_badges);
+        assert!(!cx.global::<crate::gpui_shell::config::Settings>().terminal_label_badges);
+        assert_eq!(window.notifications(cx).len(), 1, "save failure must be visible");
+    });
+}
+
+#[cfg(feature = "gpui-test-support")]
+#[gpui::test]
+fn terminal_label_badges_switch_persists_and_updates_open_terminal_settings(
+    cx: &mut gpui::TestAppContext,
+) {
+    use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
+
+    let _fixture_guard = lock_theme_studio();
+    let _guard = SettingsBytesGuard::capture();
+    nebula_settings::persist_keys(&[("terminal_label_badges", "0".into())]).unwrap();
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut pane_out = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let pane = cx.new(|cx| SettingsPane::new(window, cx));
+        pane.update(cx, |pane, _| pane.active_section = 1);
+        pane_out = Some(pane.clone());
+        gpui_component::Root::new(pane, window, cx)
+    });
+    let pane = pane_out.unwrap();
+    cx.simulate_resize(gpui::size(px(1280.0), px(1600.0)));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    for expected in [true, false] {
+        let bounds = cx
+            .debug_bounds("nebula-switch-terminal_label_badges")
+            .expect("terminal label badges must have a real settings switch");
+        let viewport = cx.update(|window, _| window.viewport_size());
+        if bounds.top() < px(0.0) || bounds.bottom() > viewport.height {
+            let position = gpui::point(viewport.width / 2.0, viewport.height / 2.0);
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position,
+                delta: gpui::ScrollDelta::Pixels(gpui::point(
+                    px(0.0),
+                    position.y - bounds.center().y,
+                )),
+                touch_phase: gpui::TouchPhase::Moved,
+                modifiers: Default::default(),
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+        let bounds = cx.debug_bounds("nebula-switch-terminal_label_badges").unwrap();
+        assert!(bounds.top() >= px(0.0) && bounds.bottom() <= viewport.height);
+        cx.simulate_click(bounds.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(pane.read_with(cx, |pane, _| pane.runtime.terminal_label_badges), expected);
+        assert_eq!(RuntimeSettings::load().terminal_label_badges, expected);
+        assert_eq!(
+            pane.read_with(cx, |_, cx| {
+                cx.global::<crate::gpui_shell::config::Settings>().terminal_label_badges
+            }),
+            expected
+        );
+        assert_eq!(
+            pane.read_with(cx, |pane, _| pane.setting_override("terminal_label_badges")),
+            Some((expected, "0".into()))
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+}
+
+#[cfg(feature = "gpui-test-support")]
+#[gpui::test]
 fn animation_effects_switch_is_visible_in_appearance_and_persists(cx: &mut gpui::TestAppContext) {
     use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
 

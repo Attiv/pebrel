@@ -133,6 +133,15 @@ impl SettingsPane {
             ));
         let terminal = self
             .group(language.pick("终端外观", "Terminal appearance"), cx)
+            .child(self.switch_row(
+                "terminal_label_badges",
+                language.text(crate::i18n::Message::SettingsAppearanceTerminalLabelBadges),
+                language.text(
+                    crate::i18n::Message::SettingsAppearanceTerminalLabelBadgesDescription,
+                ),
+                self.runtime.terminal_label_badges,
+                cx,
+            ))
             .child(self.row(
                 language.text(crate::i18n::Message::SettingsFontEnglish),
                 help("font_family", language),
