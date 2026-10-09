@@ -7,6 +7,7 @@
 mod shutdown;
 pub(crate) use shutdown::{quit_all, quit_for_update};
 mod startup_geometry;
+mod window_geometry;
 pub(super) use startup_geometry::prepare_initial_grid;
 
 #[cfg(windows)]
@@ -428,30 +429,7 @@ fn workspace_window_options(
 ) -> WindowOptions {
     match role {
         WindowRole::Regular => {
-            let preferred = restored
-                .map(|state| size(px(state.width as f32), px(state.height as f32)))
-                .or_else(|| startup_geometry::preferred_size(cx, sidebar_width))
-                .unwrap_or_else(|| size(px(1080.0), px(720.0)));
-            let bounds = cx.primary_display().map_or_else(
-                || Bounds::centered(None, preferred, cx),
-                |display| {
-                    startup_geometry::restore_bounds(restored, display.visible_bounds(), preferred)
-                },
-            );
-            let window_bounds = if restored.is_some_and(|state| state.maximized) {
-                WindowBounds::Maximized(bounds)
-            } else {
-                WindowBounds::Windowed(bounds)
-            };
-            crate::platform::window_chrome::configure_options(WindowOptions {
-                window_bounds: Some(window_bounds),
-                window_min_size: Some(size(px(760.0), px(540.0)).min(&bounds.size)),
-                titlebar: Some(TitleBar::title_bar_options()),
-                app_id: Some("pebrel".to_owned()),
-                window_background: crate::gpui_shell::wallpaper::initial_background_appearance(),
-                focus,
-                ..Default::default()
-            })
+            startup_geometry::regular_options(cx, focus, sidebar_width, restored)
         },
         WindowRole::QuickTerminal => {
             let (display_id, visible) = quick_terminal_anchor_display(cx)
@@ -513,11 +491,12 @@ fn open_workspace_window(
         && crate::platform::startup::start_hidden(&runtime);
     let restored_window_state = match &startup {
         WorkspaceStartup::RestoreUpdate(session) => session.window,
-        WorkspaceStartup::RestoreOrDefault if runtime.restore_session => crate::session::load()
-            .filter(crate::session::should_restore)
-            .and_then(|session| session.window),
+        WorkspaceStartup::RestoreOrDefault => {
+            crate::session::load().and_then(|session| session.window)
+        },
         _ => None,
     };
+    let restored_window_state = window_geometry::validated_state(restored_window_state);
     let mut options =
         workspace_window_options(cx, focus, role, runtime.sidebar_width, restored_window_state);
     if start_hidden {
@@ -548,7 +527,10 @@ fn open_workspace_window(
                 cx,
             )
         });
-        workspace.update(cx, |workspace, _| workspace.window_hidden = start_hidden);
+        workspace.update(cx, |workspace, _| {
+            workspace.window_hidden = start_hidden;
+            workspace.record_window_bounds(window);
+        });
         if runtime_window_id == 1
             && let Ok(path) = std::env::var("NEBULA_GPUI_OPEN_DOC")
             && !path.is_empty()
@@ -1468,6 +1450,9 @@ fn combined_session(
 }
 
 fn save_combined_session(cx: &mut App, clean: bool) -> std::io::Result<()> {
+    if clean {
+        window_geometry::capture_all(cx);
+    }
     let session = combined_session(None, cx);
     let reason = if clean { SaveReason::Quit } else { SaveReason::Checkpoint };
     cx.global_mut::<WindowRegistry>().session_persistence.save(session, reason)
@@ -1554,10 +1539,11 @@ fn unregister(runtime_window_id: u64, cx: &mut App) {
 
 pub(super) fn close_saved_workspace_window(
     runtime_window_id: u64,
-    session: crate::session::Session,
+    mut session: crate::session::Session,
     window: &mut Window,
     cx: &mut App,
 ) {
+    session.window = window_geometry::capture(session.window, WindowRole::Regular, window);
     if let Err(error) =
         save_current_window_session(runtime_window_id, session, SaveReason::WindowClose, cx)
     {
@@ -1569,6 +1555,7 @@ pub(super) fn close_saved_workspace_window(
 
 pub(crate) fn close_empty_workspace_window(
     runtime_window_id: u64,
+    state: Option<crate::session::WindowState>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -1580,7 +1567,11 @@ pub(crate) fn close_empty_workspace_window(
         let session = combined_session(None, cx);
         let reason =
             if session.is_some() { SaveReason::TabsClosed } else { SaveReason::WindowClose };
-        let session = session.unwrap_or_else(|| crate::session::Session::new(0, Vec::new()));
+        let session = session.unwrap_or_else(|| {
+            let mut empty = crate::session::Session::new(0, Vec::new());
+            empty.window = window_geometry::capture(state, WindowRole::Regular, window);
+            empty
+        });
         if let Err(error) =
             cx.global_mut::<WindowRegistry>().session_persistence.save(Some(session), reason)
         {
@@ -1591,26 +1582,6 @@ pub(crate) fn close_empty_workspace_window(
 }
 
 impl NebulaWorkspace {
-    fn record_window_bounds(&mut self, window: &Window) {
-        if self.window_role != WindowRole::Regular || window.is_fullscreen() {
-            return;
-        }
-        if window.is_maximized() {
-            if let Some(state) = self.window_state.as_mut() {
-                state.maximized = true;
-            }
-            return;
-        }
-        let bounds = window.window_bounds().get_bounds();
-        self.window_state = Some(crate::session::WindowState {
-            x: Some(f32::from(bounds.origin.x).round() as i32),
-            y: Some(f32::from(bounds.origin.y).round() as i32),
-            width: f32::from(bounds.size.width).round().max(1.0) as u32,
-            height: f32::from(bounds.size.height).round().max(1.0) as u32,
-            maximized: false,
-        });
-    }
-
     pub(crate) fn cross_window_drag_payload(
         &self,
         ix: usize,

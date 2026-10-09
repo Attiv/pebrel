@@ -285,6 +285,7 @@ fn parse(data: &str) -> Option<Session> {
     if matches!(session.version, 1..=3) {
         session.version = VERSION;
     }
+    session.recover_window_geometry();
     (session.version == VERSION).then_some(session)
 }
 

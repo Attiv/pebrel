@@ -1569,15 +1569,6 @@ impl NebulaWorkspace {
         (0..self.tabs.len()).find_map(|tab_ix| self.busy_process_in_tab(tab_ix, None, cx))
     }
 
-    fn save_clean_window_session(&mut self, cx: &mut App) -> std::io::Result<()> {
-        windowing::save_current_window_session(
-            self.runtime_window_id,
-            self.snapshot_session(cx),
-            session_persistence::SaveReason::WindowClose,
-            cx,
-        )
-    }
-
     /// 聚焦另一个 pane（点击上报或方向导航落点）。
     fn focus_pane(
         &mut self,

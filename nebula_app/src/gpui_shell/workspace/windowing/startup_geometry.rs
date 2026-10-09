@@ -4,7 +4,10 @@
 //! platform exposes display DPI, supply the final size before the window is
 //! shown; otherwise keep the existing post-creation sizing fallback.
 
-use gpui::{App, Bounds, Pixels, Size, Window, point, px, size};
+use gpui::{App, Bounds, Pixels, Size, Window, WindowBounds, WindowOptions, px, size};
+use gpui_component::TitleBar;
+
+use super::window_geometry;
 
 use crate::gpui_shell::terminal::view::TerminalView;
 
@@ -42,45 +45,44 @@ fn fit_preflight_size(preferred: Size<Pixels>, cx: &App) -> Size<Pixels> {
     fit_native_size(preferred, cx.primary_display().map(|display| display.visible_bounds().size))
 }
 
-pub(super) fn restore_bounds(
-    state: Option<crate::session::WindowState>,
-    visible: Bounds<Pixels>,
-    preferred: Size<Pixels>,
-) -> Bounds<Pixels> {
-    let fitted = preferred.min(&visible.size);
-    let centered = || {
-        Bounds::new(
-            point(
-                visible.origin.x + (visible.size.width - fitted.width) / 2.0,
-                visible.origin.y + (visible.size.height - fitted.height) / 2.0,
-            ),
-            fitted,
-        )
+pub(super) fn regular_options(
+    cx: &mut App,
+    focus: bool,
+    sidebar_width: f32,
+    restored: Option<crate::session::WindowState>,
+) -> WindowOptions {
+    let restored = window_geometry::validated_state(restored);
+    let display = window_geometry::restored_display(cx, restored);
+    let preferred = restored
+        .map(|state| size(px(state.width as f32), px(state.height as f32)))
+        .or_else(|| preferred_size(cx, sidebar_width))
+        .unwrap_or_else(|| size(px(1080.0), px(720.0)));
+    let bounds = display.as_ref().map_or_else(
+        || Bounds::centered(None, preferred, cx),
+        |display| {
+            let visible = display.visible_bounds();
+            let fitted = fit_native_size(preferred, Some(visible.size));
+            window_geometry::restore_bounds(restored, visible, fitted)
+        },
+    );
+    let window_bounds = if restored.is_some_and(|state| state.maximized) {
+        WindowBounds::Maximized(bounds)
+    } else {
+        WindowBounds::Windowed(bounds)
     };
-    let Some(state) = state else { return centered() };
-    let (Some(x), Some(y)) = (state.x, state.y) else { return centered() };
-    let saved = Bounds::new(point(px(x as f32), px(y as f32)), fitted);
-    let visible_right = visible.origin.x + visible.size.width;
-    let visible_bottom = visible.origin.y + visible.size.height;
-    let saved_right = saved.origin.x + saved.size.width;
-    let saved_bottom = saved.origin.y + saved.size.height;
-    if saved_right <= visible.origin.x
-        || saved_bottom <= visible.origin.y
-        || saved.origin.x >= visible_right
-        || saved.origin.y >= visible_bottom
-    {
-        return centered();
-    }
-    Bounds::new(
-        point(
-            saved.origin.x.max(visible.origin.x).min(visible_right - fitted.width),
-            saved.origin.y.max(visible.origin.y).min(visible_bottom - fitted.height),
-        ),
-        fitted,
-    )
+    crate::platform::window_chrome::configure_options(WindowOptions {
+        window_bounds: Some(window_bounds),
+        window_min_size: Some(size(px(760.0), px(540.0)).min(&bounds.size)),
+        titlebar: Some(TitleBar::title_bar_options()),
+        app_id: Some("pebrel".to_owned()),
+        window_background: crate::gpui_shell::wallpaper::initial_background_appearance(),
+        display_id: display.map(|display| display.id()),
+        focus,
+        ..Default::default()
+    })
 }
 
-pub(super) fn preferred_size(cx: &App, sidebar_width: f32) -> Option<Size<Pixels>> {
+fn preferred_size(cx: &App, sidebar_width: f32) -> Option<Size<Pixels>> {
     let scale = crate::platform::startup::primary_display_scale()?;
     Some(fit_preflight_size(
         default_size(
@@ -197,5 +199,30 @@ mod tests {
             fit_native_size(size(px(1200.0), px(668.0)), Some(size(px(1000.0), px(600.0)))),
             size(px(1000.0), px(600.0)),
         );
+    }
+
+    #[cfg(feature = "gpui-test-support")]
+    #[gpui::test]
+    fn invalid_saved_dimensions_use_default_geometry(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            crate::gpui_shell::init(cx, None);
+            let options = super::super::workspace_window_options;
+            let role = super::super::WindowRole::Regular;
+            let expected = options(cx, false, role, 230.0, None).window_bounds.unwrap();
+            for (width, height) in [(0, 720), (1200, 0), (u32::MAX, 720)] {
+                let saved = crate::session::WindowState {
+                    x: Some(100),
+                    y: Some(80),
+                    width,
+                    height,
+                    maximized: false,
+                };
+                assert_eq!(
+                    options(cx, false, role, 230.0, Some(saved)).window_bounds.unwrap(),
+                    expected,
+                    "invalid saved geometry must not replace the configured startup grid",
+                );
+            }
+        });
     }
 }

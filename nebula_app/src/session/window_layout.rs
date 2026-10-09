@@ -16,6 +16,9 @@ pub(crate) fn combine_sessions(
     let mut combined = None;
     for (active, session) in sessions {
         let combined = combined.get_or_insert_with(|| Session::new(0, Vec::new()));
+        if combined.window.is_none() || active {
+            combined.window = session.window.or(combined.window);
+        }
         if active {
             combined.active_tab = combined.tabs.len().saturating_add(session.active_tab);
         }
@@ -35,6 +38,19 @@ pub(crate) fn combine_sessions(
 }
 
 impl Session {
+    /// Earlier combined snapshots stored geometry only in window boundaries.
+    /// Keep an explicit top-level value authoritative for flat-list readers.
+    pub(super) fn recover_window_geometry(&mut self) {
+        if self.window.is_none() {
+            self.window = self
+                .window_layout
+                .iter()
+                .find(|layout| layout.active)
+                .and_then(|layout| layout.window)
+                .or_else(|| self.window_layout.iter().find_map(|layout| layout.window));
+        }
+    }
+
     /// Open the previously active window last so native activation restores it.
     /// Invalid boundaries are an error, never permission to drop or duplicate tabs.
     pub(crate) fn into_update_windows(self) -> std::io::Result<Vec<Session>> {
@@ -88,6 +104,69 @@ mod tests {
             active,
             cwds.iter().map(|cwd| TabSession::single((*cwd).into(), None, None)).collect(),
         )
+    }
+
+    fn geometry(x: i32) -> WindowState {
+        WindowState { x: Some(x), y: Some(80), width: 1200, height: 720, maximized: false }
+    }
+
+    #[test]
+    fn combined_snapshot_exposes_active_geometry_for_ordinary_startup() {
+        let mut first = window(&["/first"], 0);
+        first.window = Some(geometry(100));
+        let mut active = window(&["/active"], 0);
+        active.window = Some(geometry(2100));
+        let combined = combine_sessions([(false, first), (true, active.clone())]).unwrap();
+        assert_eq!(combined.window, active.window);
+    }
+
+    #[test]
+    fn empty_final_window_still_retains_its_geometry() {
+        let mut empty = window(&[], 0);
+        empty.window = Some(geometry(100));
+        let combined = combine_sessions([(true, empty.clone())]).unwrap();
+        assert!(combined.tabs.is_empty());
+        assert!(!crate::session::should_restore(&combined));
+        assert_eq!(combined.window, empty.window);
+    }
+
+    #[test]
+    fn old_combined_snapshot_recovers_active_geometry_without_schema_change() {
+        let mut first = window(&["/first"], 0);
+        first.window = Some(geometry(100));
+        let mut active = window(&["/active"], 0);
+        active.window = Some(geometry(2100));
+        let mut old = combine_sessions([(false, first), (true, active.clone())]).unwrap();
+        old.window = None;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.json");
+        crate::session::save_to(&path, &old).unwrap();
+        let loaded = crate::session::load_from(&path).unwrap();
+        assert_eq!(loaded.version, old.version);
+        assert_eq!(loaded.tabs, old.tabs);
+        assert_eq!(loaded.window, active.window);
+    }
+
+    #[test]
+    fn explicit_top_level_geometry_is_authoritative_over_old_boundaries() {
+        let mut original = window(&["/active"], 0);
+        original.window = Some(geometry(100));
+        let mut combined = combine_sessions([(true, original)]).unwrap();
+        combined.window = Some(geometry(200));
+        combined.recover_window_geometry();
+        assert_eq!(combined.window, Some(geometry(200)));
+    }
+
+    #[test]
+    fn snapshots_without_active_geometry_fall_back_to_the_first_saved_window() {
+        let mut first = window(&["/first"], 0);
+        first.window = Some(geometry(100));
+        let mut combined =
+            combine_sessions([(false, first.clone()), (true, window(&[], 0))]).unwrap();
+        assert_eq!(combined.window, first.window);
+        combined.window = None;
+        combined.recover_window_geometry();
+        assert_eq!(combined.window, first.window);
     }
 
     #[test]

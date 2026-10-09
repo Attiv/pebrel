@@ -203,10 +203,12 @@ impl NebulaWorkspace {
                         json!({ "target": "window", "window_id": self.runtime_window_id }),
                     ));
                 }
+                self.record_window_bounds(window);
                 let tab_count = self.tabs.len();
                 if self.tabs.is_empty() {
                     super::windowing::close_empty_workspace_window(
                         self.runtime_window_id,
+                        self.window_state,
                         window,
                         cx,
                     );
@@ -1011,7 +1013,12 @@ impl NebulaWorkspace {
 
     pub(super) fn close_empty_workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.keep_session_on_close(window, cx) {
-            super::windowing::close_empty_workspace_window(self.runtime_window_id, window, cx);
+            super::windowing::close_empty_workspace_window(
+                self.runtime_window_id,
+                self.window_state,
+                window,
+                cx,
+            );
         }
         cx.notify();
     }
@@ -1022,6 +1029,7 @@ impl NebulaWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        self.record_window_bounds(window);
         // Private administrator windows have no public resident discovery path.
         if self.window_role != super::windowing::WindowRole::Regular
             || crate::platform::elevation::requires_isolation()

@@ -77,7 +77,19 @@ impl SessionPersistence {
                 },
                 SaveReason::WindowClose | SaveReason::TabsClosed => current,
                 SaveReason::Quit => current
-                    .filter(|session| !session.tabs.is_empty())
+                    .filter(|session| !session.tabs.is_empty() || session.window.is_some())
+                    .map(|current| {
+                        if current.tabs.is_empty()
+                            && let Some(mut latest) = self.latest.clone()
+                        {
+                            // A settings/file-only window owns current geometry, not the
+                            // closed-to-tray tabs or their saved window boundaries.
+                            latest.window = current.window;
+                            latest
+                        } else {
+                            current
+                        }
+                    })
                     .or_else(|| self.latest.clone()),
             }
         };
@@ -139,6 +151,66 @@ mod tests {
             }),
         });
         Session::new(0, vec![tab])
+    }
+
+    fn geometry_only(width: u32) -> Session {
+        let mut session = Session::new(0, vec![]);
+        session.window = Some(crate::session::WindowState {
+            x: Some(200),
+            y: Some(80),
+            width,
+            height: 800,
+            maximized: false,
+        });
+        session
+    }
+
+    #[test]
+    fn quitting_first_geometry_only_window_persists_its_bounds() {
+        let mut state = ordinary_window();
+        let current = geometry_only(1200);
+        state.save_with(Some(current.clone()), SaveReason::Quit, |_| Ok(())).unwrap();
+        let saved = state.saved.as_ref().expect("a real empty window still owns geometry");
+        assert_eq!(saved.window, current.window);
+        assert!(saved.tabs.is_empty());
+        assert!(saved.clean_exit);
+        state
+            .save_with(Some(geometry_only(1300)), SaveReason::Quit, |_| {
+                panic!("a repeated quit must not replace frozen geometry")
+            })
+            .unwrap();
+        assert_eq!(state.saved.as_ref().unwrap().window, current.window);
+    }
+
+    #[test]
+    fn quitting_empty_window_merges_geometry_without_replacing_tabs_or_boundaries() {
+        let mut first = sample_session();
+        first.window = geometry_only(900).window;
+        let mut second = sample_session();
+        second.window = geometry_only(1000).window;
+        let latest = combine_sessions([(false, first), (true, second)]).unwrap();
+        let mut state = ordinary_window();
+        state.save_with(Some(latest.clone()), SaveReason::WindowClose, |_| Ok(())).unwrap();
+        let current = combine_sessions([(true, geometry_only(1200))]).unwrap();
+        state.save_with(Some(current.clone()), SaveReason::Quit, |_| Ok(())).unwrap();
+        let saved = state.saved.unwrap();
+        assert_eq!(saved.window, current.window);
+        assert_eq!(saved.tabs, latest.tabs);
+        assert_eq!(saved.window_layout, latest.window_layout);
+        assert!(saved.into_update_windows().is_ok(), "empty boundaries cannot replace saved tabs");
+    }
+
+    #[test]
+    fn quitting_empty_window_after_explicit_tab_close_never_resurrects_tabs() {
+        let mut state = ordinary_window();
+        state.save_with(Some(sample_session()), SaveReason::Checkpoint, |_| Ok(())).unwrap();
+        state.save_with(Some(geometry_only(1000)), SaveReason::TabsClosed, |_| Ok(())).unwrap();
+        let current = geometry_only(1200);
+        state.save_with(Some(current.clone()), SaveReason::Quit, |_| Ok(())).unwrap();
+        let saved = state.saved.unwrap();
+        assert_eq!(saved.window, current.window);
+        assert!(saved.tabs.is_empty());
+        assert!(!crate::session::should_restore(&saved));
     }
 
     fn save_to(
@@ -217,7 +289,7 @@ mod tests {
     #[test]
     fn an_empty_startup_or_auxiliary_window_cannot_erase_a_saved_session() {
         let mut state = ordinary_window();
-        for current in [None, Some(Session::new(0, vec![]))] {
+        for current in [None, Some(Session::new(0, vec![])), Some(geometry_only(1200))] {
             let _ = state.save_with(current, SaveReason::Checkpoint, |_| {
                 panic!("initial empty state must not reach storage")
             });
