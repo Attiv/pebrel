@@ -1,6 +1,7 @@
 //! Real workspace close/restore lifecycle and document safety regressions.
 
 use super::*;
+use crate::gpui_shell::file_editor::TextFileView;
 use crate::session::{LaunchSession, LayoutSession, SplitAxis, TabSession};
 use gpui::{Keystroke, TestAppContext, VisualTestContext};
 
@@ -316,12 +317,25 @@ fn unsupported_remote_and_merge_closes_cannot_undo_an_older_tab_on_the_same_keyp
                 workspace.add_terminal_with(fixture.launch.clone(), None, None, window, cx);
                 workspace.close_tab(workspace.active, window, cx);
                 if remote {
-                    workspace.open_remote_document(
-                        "pebrel-test@127.0.0.1:1".into(),
-                        "/unsupported.txt".into(),
-                        window,
-                        cx,
-                    );
+                    let location = crate::ssh_sftp::document::RemoteLocation {
+                        destination: "pebrel-test@127.0.0.1:1".into(),
+                        path: fixture
+                            .directory
+                            .path()
+                            .join("unsupported.txt")
+                            .to_string_lossy()
+                            .into_owned(),
+                    };
+                    let view = cx.new(|cx| {
+                        TextFileView::new_remote_identity_fixture(location.clone(), window, cx)
+                    });
+                    assert!(view.read(cx).is_remote_location(&location));
+                    assert!(!view.read(cx).is_local_path(&view.read(cx).path));
+                    let subscription = cx.subscribe(&view, |_, _, _, _| {});
+                    workspace.insert_new_tab(WorkspaceTab::Document {
+                        view,
+                        _subscription: subscription,
+                    });
                 } else {
                     let view = cx.new(|cx| {
                         crate::gpui_shell::code_tab::CodeTabView::new_git_merge(

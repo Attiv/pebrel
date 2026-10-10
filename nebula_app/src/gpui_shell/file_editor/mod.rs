@@ -177,6 +177,21 @@ impl TextFileView {
         Self::new_with_source(DocumentSource::Remote(location), window, cx)
     }
 
+    #[cfg(all(test, feature = "gpui-test-support"))]
+    pub(crate) fn new_remote_identity_fixture(
+        location: RemoteLocation,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        // Ownership tests need a real remote source identity, not a network
+        // worker whose completion wakes GPUI from outside its test scheduler.
+        // The constructor captures the local source before scheduling its load.
+        let mut view =
+            Self::new_with_source(DocumentSource::Local(PathBuf::from(&location.path)), window, cx);
+        view.source = DocumentSource::Remote(location);
+        view
+    }
+
     pub(crate) fn source_label(&self) -> String {
         self.source.display()
     }
