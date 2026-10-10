@@ -89,13 +89,57 @@ impl TerminalView {
         probe: Option<InputModeLease>,
     ) -> bool {
         let Some(pending) = &self.input_protocol else { return true };
-        let Some(probe) = probe else { return false };
         let Some(session) = &self.session else { return false };
         let mut term = session.term.lock();
+        // OSC 133;A/D can restore the protocol synchronously before its UI
+        // event is consumed. A vanished core lease needs acknowledgement,
+        // not another restoration. A newer active owner must still be rejected.
+        if term.nebula_input_mode_lease().is_none() {
+            self.input_protocol = None;
+            return true;
+        }
+        let Some(probe) = probe else { return false };
         if term.nebula_owns_input_modes(pending.lease) && term.nebula_restore_input_modes(probe) {
             self.input_protocol = None;
             return true;
         }
         false
+    }
+}
+
+#[cfg(all(test, feature = "gpui-test-support"))]
+mod tests {
+    use super::super::session;
+    use super::super::startup_tests::open;
+    use super::*;
+    use gpui::TestAppContext;
+    use nebula_terminal::event_loop::StreamProcessor;
+
+    #[gpui::test]
+    fn process_exit_accepts_modes_restored_by_parser_but_not_a_new_owner(cx: &mut TestAppContext) {
+        let (view, window, _) = open(cx);
+        view.update(window, |view, _cx| {
+            let (session, _input, _events, proxy) = session::test_session_with_events();
+            view.session = Some(session);
+            view.suggest.pending_command_prompt = Some("C:\\work>".into());
+            view.capture_input_protocol();
+            assert!(view.input_protocol.is_some());
+            assert!(!view.recover_input_protocol_after_process_exit(None));
+            StreamProcessor::default().feed(
+                &mut view.session.as_ref().unwrap().term.lock(),
+                &proxy,
+                b"\x1b]133;A\x07C:\\work>",
+            );
+            assert!(view.session.as_ref().unwrap().term.lock().nebula_input_mode_lease().is_none());
+            assert!(view.recover_input_protocol_after_process_exit(None));
+            assert!(view.input_protocol.is_none());
+
+            view.capture_input_protocol();
+            let newer = view.session.as_ref().unwrap().term.lock().nebula_begin_shell_input();
+            assert!(newer.is_some());
+            assert!(!view.recover_input_protocol_after_process_exit(None));
+            assert!(!view.recover_input_protocol_after_process_exit(newer));
+            assert_eq!(view.session.as_ref().unwrap().term.lock().nebula_input_mode_lease(), newer);
+        });
     }
 }

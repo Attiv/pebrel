@@ -12,6 +12,7 @@ pub(super) const REOPEN_KEY_CONTEXT: &str =
 
 #[derive(Clone)]
 enum ClosedContent {
+    Unsupported,
     Settings,
     Terminal(crate::session::TabSession),
     LocalFile(std::path::PathBuf),
@@ -34,16 +35,18 @@ impl NebulaWorkspace {
             WorkspaceTab::Document { view, .. } => {
                 let view = view.read(cx);
                 if !view.is_local_path(&view.path) {
-                    return None;
+                    ClosedContent::Unsupported
+                } else {
+                    ClosedContent::LocalFile(view.path.clone())
                 }
-                ClosedContent::LocalFile(view.path.clone())
             },
             WorkspaceTab::Code { view, .. } => {
                 let view = view.read(cx);
                 if !view.is_regular_path(&view.path) {
-                    return None;
+                    ClosedContent::Unsupported
+                } else {
+                    ClosedContent::LocalFile(view.path.clone())
                 }
-                ClosedContent::LocalFile(view.path.clone())
             },
             WorkspaceTab::Settings { .. } => ClosedContent::Settings,
         };
@@ -74,6 +77,12 @@ impl NebulaWorkspace {
         let previous_count = self.tabs.len();
         let at = closed.at.min(previous_count);
         let restored = match &closed.content {
+            ClosedContent::Unsupported => {
+                // This close owns one undo operation even though its content
+                // cannot safely be restored. Never undo an older tab instead.
+                self.closed_tabs.pop();
+                return true;
+            },
             ClosedContent::Settings => {
                 self.clear_reader_focus(cx);
                 self.open_settings(window, cx);

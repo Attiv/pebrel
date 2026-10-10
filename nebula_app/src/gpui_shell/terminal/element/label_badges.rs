@@ -10,7 +10,7 @@ pub(super) fn badge_provider(
     view: &super::TerminalView,
     enabled: bool,
 ) -> Option<crate::runtime_api::RuntimeAgent> {
-    enabled.then(|| view.runtime_agent()).flatten()
+    enabled.then(|| view.runtime_chat_agent()).flatten()
 }
 
 #[derive(Clone, Copy)]

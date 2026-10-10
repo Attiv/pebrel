@@ -54,6 +54,10 @@ fn initialize_test(cx: &mut TestAppContext) -> WindowSessionFixture {
         crate::gpui_shell::file_editor::init(cx);
         super::super::init(cx);
         initialize(cx, crate::runtime_api::RuntimeHub::new());
+        // Hosted Windows runners may be elevated. These fixtures represent an
+        // ordinary window; privileged storage isolation is tested separately.
+        cx.global_mut::<WindowRegistry>().session_persistence =
+            SessionPersistence::ordinary_window_for_test();
     });
     fixture
 }

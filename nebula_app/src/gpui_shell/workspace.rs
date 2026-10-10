@@ -1593,10 +1593,10 @@ impl NebulaWorkspace {
                 meta.has_bell = false;
             }
             self.reveal_active_tab();
-            self.focus_active(window, cx);
             self.sync_side_panel_to_active(true, cx);
             cx.notify();
         }
+        self.focus_active(window, cx);
     }
 
     fn focus_active(&self, window: &mut Window, cx: &mut Context<Self>) {

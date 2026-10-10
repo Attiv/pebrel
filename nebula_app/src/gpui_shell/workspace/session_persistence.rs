@@ -28,6 +28,12 @@ impl Default for SessionPersistence {
 }
 
 impl SessionPersistence {
+    #[cfg(test)]
+    pub(super) fn ordinary_window_for_test() -> Self {
+        // Exercise ordinary persistence independently of the test runner's UAC token.
+        Self { isolated: false, ..Self::default() }
+    }
+
     pub(super) fn update_windows(&self) -> std::io::Result<Vec<Session>> {
         self.saved
             .clone()
@@ -129,13 +135,15 @@ mod tests {
             });
         }
         assert!(state.latest.is_none());
+        assert!(state.saved.is_none());
+        assert!(state.update_windows().is_err(), "isolated windows have no shared snapshot");
     }
     use crate::session::{AgentSession, LayoutSession, TabSession};
 
     fn ordinary_window() -> SessionPersistence {
         // Hosted Windows runners can be elevated. These tests exercise ordinary
         // window persistence; privileged isolation has its own negative test.
-        SessionPersistence { isolated: false, ..SessionPersistence::default() }
+        SessionPersistence::ordinary_window_for_test()
     }
 
     fn sample_session() -> Session {

@@ -214,6 +214,45 @@ fn cleared_shortcut_reaches_terminal_and_can_be_restored_without_restart() {
 }
 
 #[test]
+fn cleared_ordinary_workspace_shortcut_stays_cleared_in_text_controls_and_restores() {
+    use crate::config::Action;
+    use gpui::{KeyContext, Keymap, Keystroke};
+    let combo = "ctrl+shift+t";
+    let input = [Keystroke::parse(&gpui_binding_combo(combo)).unwrap()];
+    let original = default_workspace_bindings()
+        .into_iter()
+        .find(|binding| binding.action().as_any().is::<NewTerminal>())
+        .expect("the actual static new-tab default must be present");
+    let released = [None, Some(crate::gpui_shell::terminal::KEY_CONTEXT)]
+        .into_iter()
+        .map(|scope| workspace_binding_in_context(combo, &Action::ReceiveChar, scope).unwrap())
+        .collect::<Vec<_>>();
+    let restored = [None, Some(crate::gpui_shell::terminal::KEY_CONTEXT)]
+        .into_iter()
+        .map(|scope| workspace_binding_in_context(combo, &Action::CreateNewTab, scope).unwrap())
+        .collect::<Vec<_>>();
+    for leaf in ["Input", "FileEditor", "NebulaTerminal"] {
+        let contexts =
+            [KeyContext::parse("NebulaWorkspace").unwrap(), KeyContext::parse(leaf).unwrap()];
+        let mut bindings = vec![original.clone()];
+        let (active, pending) = Keymap::new(bindings.clone()).bindings_for_input(&input, &contexts);
+        assert!(!pending);
+        assert!(active[0].action().as_any().is::<NewTerminal>(), "{leaf} control group");
+        bindings.extend(released.iter().cloned());
+        let (active, pending) = Keymap::new(bindings.clone()).bindings_for_input(&input, &contexts);
+        assert!(!pending);
+        assert!(active.is_empty(), "clearing the ordinary default must also apply in {leaf}");
+        bindings.extend(restored.iter().cloned());
+        let (active, pending) = Keymap::new(bindings).bindings_for_input(&input, &contexts);
+        assert!(!pending);
+        assert!(
+            active.first().is_some_and(|binding| binding.action().as_any().is::<NewTerminal>()),
+            "restoring the ordinary default must work without restart in {leaf}"
+        );
+    }
+}
+
+#[test]
 fn stale_bare_key_removal_unbinds_the_action_instead_of_swallowing_the_key() {
     use crate::config::Action;
     use gpui::{KeyContext, Keymap, Keystroke};

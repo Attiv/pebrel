@@ -216,7 +216,15 @@ fn workspace_binding_in_context(
     let combo = gpui_binding_combo(combo);
     // This default belongs to tab/terminal chrome, including its NoAction
     // override. A cleared/remapped Cmd-Z must not swallow native text Undo.
-    let scope = if *action == Action::ReopenClosedTab || combo == gpui_binding_combo("cmd+z") {
+    let scope = if *action == Action::ReceiveChar
+        && ["cmd+z", "cmd+shift+z", "ctrl+z", "ctrl+shift+z"]
+            .iter()
+            .any(|key| combo == gpui_binding_combo(key))
+    {
+        // Released Undo/Redo keys reach terminal input without suppressing
+        // the native text actions. Other cleared defaults keep their scope.
+        Some("!Input && !FileEditor")
+    } else if *action == Action::ReopenClosedTab || combo == gpui_binding_combo("cmd+z") {
         Some(tab_undo::REOPEN_KEY_CONTEXT)
     } else {
         scope
