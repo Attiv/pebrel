@@ -109,8 +109,13 @@ fn switching_to_instant_removes_closed_panel_geometry(cx: &mut TestAppContext) {
     std::fs::write(&path, "# Heading\n\nBody").unwrap();
     let (workspace, mut cx) = open(path, cx);
     cx.update(|_, cx| {
-        cx.set_global(Settings::load(nebula_settings::ThemeName::Nord));
+        let mut settings = Settings::load(nebula_settings::ThemeName::Nord);
         // 必须保留真实动画路径，否则系统减弱动态效果会掩盖偏好切换的问题。
+        // 同理，并行的设置夹具可能正把 animations=0 写进共享设置文件
+        // （见 gpui_shell::settings_fixture）：这里要的是「动画开着」这条路径，
+        // 就地声明，不读文件里恰好是什么值。
+        settings.animations = true;
+        cx.set_global(settings);
         cx.set_reduce_motion(false);
     });
     for close_before_switch in [false, true] {

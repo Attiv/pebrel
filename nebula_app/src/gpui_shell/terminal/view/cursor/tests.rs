@@ -20,6 +20,16 @@ fn geometry(shape: CursorShape) -> CursorGeometry {
     }
 }
 
+/// 轨迹断言读的是两个门：`cursor_motion` 与 `animations`（经 `animations_enabled`）。
+/// `open` 用 `Settings::load` 读真实设置文件，而并行的设置夹具可能正在把
+/// `animations` 写进同一个文件（见 `gpui_shell::settings_fixture`）：设置开关的
+/// 用例在它运行期间文件里就是 `animations=0`，读到的轨迹会被 snap 掉。
+/// 轨迹用例自己声明这两个输入，不去观察磁盘上恰好是什么字节。
+fn smooth_motion(cx: &mut gpui::Context<TerminalView>) {
+    cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+    cx.global_mut::<Settings>().animations = true;
+}
+
 #[gpui::test]
 fn cursor_motion_hot_applies_without_replacing_the_session_or_logical_cursor(
     cx: &mut TestAppContext,
@@ -28,7 +38,7 @@ fn cursor_motion_hot_applies_without_replacing_the_session_or_logical_cursor(
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
             let term = view.session.as_ref().unwrap().term.clone();
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             view.apply_settings(cx);
             let before = capture(view);
             let shape = before.cursor.as_ref().unwrap().shape;
@@ -66,7 +76,7 @@ fn cursor_motion_resets_for_long_hide_scrolled_reduced_motion_and_changed_geomet
     let (view, window, _) = open(cx);
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             let mut snap = capture(view);
             let mut g = geometry(snap.cursor.as_ref().unwrap().shape);
             let cursor = snap.cursor.as_mut().unwrap();
@@ -114,7 +124,7 @@ fn psreadline_hidden_repaint_preserves_typing_and_backspace_motion(cx: &mut Test
     let (view, window, _) = open(cx);
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             feed(view, b"QA> ");
             let snap = capture(view);
             let g = geometry(snap.cursor.as_ref().unwrap().shape);
@@ -166,7 +176,7 @@ fn hidden_cursor_stops_frame_demand_and_invalidates_changed_surface(cx: &mut Tes
     let (view, window, _) = open(cx);
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             let snap = capture(view);
             let g = geometry(snap.cursor.as_ref().unwrap().shape);
             view.visual_cursor(snap.cursor.as_ref(), 0, g, true, window, cx);
@@ -199,7 +209,7 @@ fn blink_phase_does_not_reset_motion_and_frame_requests_are_single_flight(cx: &m
     let (view, window, _) = open(cx);
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             let snap = capture(view);
             let g = geometry(snap.cursor.as_ref().unwrap().shape);
             view.visual_cursor(snap.cursor.as_ref(), 0, g, true, window, cx);
@@ -225,7 +235,7 @@ fn negotiated_key_protocols_keep_one_bounded_left_permit(cx: &mut TestAppContext
     let (view, window, _) = open(cx);
     window.update(|window, cx| {
         view.update(cx, |view, cx| {
-            cx.global_mut::<Settings>().cursor_motion = nebula_settings::CursorMotion::Smooth;
+            smooth_motion(cx);
             let snapshot = capture(view);
             let g = geometry(snapshot.cursor.as_ref().unwrap().shape);
             let key = gpui::Keystroke::parse("left").unwrap();
