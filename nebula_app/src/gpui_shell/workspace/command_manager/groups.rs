@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::i18n::Message;
-use crate::saved_commands::BUILTIN_GROUP_ID;
+use crate::saved_commands::{is_system_group, system_groups};
 use gpui::{Anchor, AnyElement, DismissEvent, Point, anchored, deferred};
 use gpui_component::menu::PopupMenuItem;
 
@@ -54,10 +54,11 @@ impl NebulaWorkspace {
                 .iter()
                 .map(|group| (Some(group.id.clone()), group.name.clone())),
         );
-        groups.push((
-            Some(BUILTIN_GROUP_ID.into()),
-            language.text(Message::CommandsBuiltinGroup).to_owned(),
-        ));
+        groups.extend(
+            system_groups()
+                .iter()
+                .map(|group| (Some(group.id.into()), language.text(group.name).to_owned())),
+        );
         groups
     }
 
@@ -219,7 +220,7 @@ impl NebulaWorkspace {
         let active = cx.theme().list_active;
         let muted = cx.theme().muted_foreground;
         let selected = index == self.command_manager_selected;
-        let delete_id = (id != BUILTIN_GROUP_ID).then(|| id.clone());
+        let delete_id = (!is_system_group(&id)).then(|| id.clone());
         let click_id = id.clone();
         let language = crate::gpui_shell::config::ui_language(cx);
         h_flex()
@@ -285,6 +286,7 @@ impl NebulaWorkspace {
             .when_some(delete_id, |row, id| {
                 row.child(
                     Button::new(SharedString::from(format!("delete-command-group-{id}")))
+                        .debug_selector(move || format!("delete-command-group-{index}"))
                         .icon(IconName::Close)
                         .ghost()
                         .xsmall()

@@ -1,4 +1,5 @@
 use super::*;
+use crate::i18n::Message;
 use gpui::{Modifiers, TestAppContext, VisualTestContext};
 
 fn draw(cx: &mut VisualTestContext) {
@@ -60,6 +61,10 @@ fn grouping_drag_and_context_menu_keep_commands_and_keyboard_order(cx: &mut Test
     let group = saved.groups()[0].id.clone();
     let (workspace, mut cx) = open_manager(saved, cx);
     let row = cx.debug_bounds("saved-command-row-0").unwrap();
+    assert!(
+        cx.debug_bounds("delete-command-group-1").is_some(),
+        "custom folders retain delete controls"
+    );
     let target =
         cx.debug_bounds(Box::leak(format!("command-group-{group}").into_boxed_str())).unwrap();
     let start = gpui::point(row.origin.x + px(125.0), row.center().y);
@@ -157,10 +162,7 @@ fn builtin_delete_can_be_cancelled_and_stays_deleted_after_reopening(cx: &mut Te
     let saved = crate::saved_commands::SavedCommands::load_from(&path).unwrap();
     assert!(
         saved
-            .builtin_commands(
-                crate::i18n::UiLanguage::EnUs,
-                crate::saved_commands::builtins::CommandPlatform::Windows
-            )
+            .builtin_commands(crate::i18n::UiLanguage::EnUs)
             .iter()
             .all(|row| row.id != deleted_id)
     );
@@ -198,7 +200,7 @@ fn root_has_commands_and_enterable_folders_with_aligned_creation_actions(cx: &mu
         cx.debug_bounds("saved-command-add-icon").unwrap().origin.x,
         cx.debug_bounds("saved-command-add-group-icon").unwrap().origin.x
     );
-    // The only next item at the root is the folder; Enter navigates, never runs.
+    // The next item is the legacy shared folder; Enter navigates, never runs.
     cx.simulate_keystrokes("down enter");
     draw(&mut cx);
     workspace.read_with(&cx, |this, cx| {
@@ -296,4 +298,146 @@ fn backup_restore_refreshes_an_open_command_manager(cx: &mut TestAppContext) {
         assert_eq!(this.command_manager_selected, 0);
     });
     assert!(window.debug_bounds("saved-command-row-0").is_some());
+}
+
+#[gpui::test]
+fn platform_folders_are_visible_enterable_and_virtualized(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("saved_commands.json");
+    let saved = crate::saved_commands::SavedCommands::load_from(&path).unwrap();
+    let (workspace, mut cx) = open_manager(saved, cx);
+    workspace.read_with(&cx, |this, cx| {
+        let folders = this
+            .command_manager_rows(cx)
+            .into_iter()
+            .filter_map(|row| match row {
+                ManagerRow::Folder { id, count, .. } => Some((id, count)),
+                _ => None,
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        for (id, minimum) in [("builtin-linux", 60), ("builtin-macos", 40), ("builtin-windows", 40)]
+        {
+            assert!(folders.get(id).is_some_and(|count| *count >= minimum), "missing {id} folder");
+        }
+    });
+    // Keyboard scroll makes a virtual folder visible; click its padding, not its label.
+    cx.simulate_keystrokes("down");
+    draw(&mut cx);
+    let folder = cx.debug_bounds("command-group-builtin-linux").unwrap();
+    cx.simulate_click(folder.origin + gpui::point(px(6.0), px(6.0)), Modifiers::default());
+    draw(&mut cx);
+    let count = workspace.read_with(&cx, |this, cx| {
+        assert_eq!(this.command_manager_group.as_deref(), Some("builtin-linux"));
+        assert!(this.tabs.is_empty());
+        this.filtered_saved_commands(cx).len()
+    });
+    let last = Box::leak(format!("saved-command-row-{}", count - 1).into_boxed_str());
+    assert!(cx.debug_bounds(&*last).is_none());
+    for _ in 1..count {
+        cx.simulate_keystrokes("down");
+    }
+    draw(&mut cx);
+    assert!(cx.debug_bounds(&*last).is_some());
+    assert!(cx.debug_bounds("saved-command-row-0").is_none());
+    cx.simulate_keystrokes("escape down down down enter");
+    draw(&mut cx);
+    workspace.read_with(&cx, |this, _| {
+        assert_eq!(this.command_manager_group.as_deref(), Some("builtin-windows"));
+        assert!(this.command_manager_open && this.tabs.is_empty());
+    });
+    // New system folders have no delete action, including offscreen rows after keyboard scrolling.
+    cx.simulate_keystrokes("escape");
+    for (index, id) in
+        ["builtin", "builtin-linux", "builtin-macos", "builtin-windows"].into_iter().enumerate()
+    {
+        draw(&mut cx);
+        assert!(
+            cx.debug_bounds(Box::leak(format!("command-group-{id}").into_boxed_str())).is_some()
+        );
+        assert!(
+            cx.debug_bounds(Box::leak(format!("delete-command-group-{index}").into_boxed_str()))
+                .is_none()
+        );
+        cx.simulate_keystrokes("down");
+    }
+    assert!(!path.exists(), "browsing is not a store migration");
+}
+
+#[gpui::test]
+fn cross_platform_search_and_copy_edit_hide_preserve_templates(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("saved_commands.json");
+    let saved = crate::saved_commands::SavedCommands::load_from(&path).unwrap();
+    let (workspace, mut cx) = open_manager(saved, cx);
+    let query = workspace.read_with(&cx, |_, cx| {
+        crate::gpui_shell::config::ui_language(cx).text(Message::CommandsLinuxPwd)
+    });
+    workspace.update_in(&mut cx, |this, window, cx| {
+        this.command_manager_input.update(cx, |input, cx| input.set_value(query, window, cx));
+    });
+    draw(&mut cx);
+    workspace.read_with(&cx, |this, cx| {
+        let ids: std::collections::HashSet<_> =
+            this.filtered_saved_commands(cx).into_iter().map(|row| row.id).collect();
+        for id in ["builtin:linux_pwd", "builtin:macos_pwd", "builtin:windows_pwd"] {
+            assert!(ids.contains(id), "global search missing {id}");
+        }
+    });
+    workspace.update_in(&mut cx, |this, window, cx| {
+        this.enter_command_group(Some("builtin-windows".into()), window, cx);
+        this.command_manager_input.update(cx, |input, cx| input.set_value(query, window, cx));
+    });
+    draw(&mut cx);
+    workspace.read_with(&cx, |this, cx| {
+        assert_eq!(this.filtered_saved_commands(cx).len(), 1);
+        assert_eq!(this.filtered_saved_commands(cx)[0].id, "builtin:windows_pwd");
+    });
+    let button = cx.debug_bounds("saved-command-copy-0").unwrap();
+    cx.simulate_click(button.center(), Modifiers::default());
+    draw(&mut cx);
+    assert_eq!(cx.read_from_clipboard().unwrap().text().as_deref(), Some("Get-Location"));
+    let button = cx.debug_bounds("saved-command-edit-0").unwrap();
+    cx.simulate_click(button.center(), Modifiers::default());
+    draw(&mut cx);
+    let button = cx.debug_bounds("saved-command-save").unwrap();
+    cx.simulate_click(button.center(), Modifiers::default());
+    draw(&mut cx);
+    let saved = crate::saved_commands::SavedCommands::load_from(&path).unwrap();
+    assert_eq!(saved.commands().len(), 1);
+    let copy = &saved.commands()[0];
+    assert!(!copy.id.starts_with("builtin:") && !copy.append_enter);
+    assert_eq!(copy.command, "Get-Location");
+    assert_eq!(saved.group_for(&copy.id), Some("builtin-windows"));
+    assert!(
+        saved
+            .builtin_commands(crate::i18n::UiLanguage::EnUs)
+            .iter()
+            .any(|row| row.id == "builtin:windows_pwd")
+    );
+    // Hide the original via its real row action, leaving the saved copy intact.
+    let builtin_index = workspace.read_with(&cx, |this, cx| {
+        this.filtered_saved_commands(cx)
+            .iter()
+            .position(|row| row.id == "builtin:windows_pwd")
+            .unwrap()
+    });
+    let button = cx
+        .debug_bounds(Box::leak(format!("saved-command-delete-{builtin_index}").into_boxed_str()))
+        .unwrap();
+    cx.simulate_click(button.center(), Modifiers::default());
+    draw(&mut cx);
+    let button = cx.debug_bounds("saved-command-delete-confirm").unwrap();
+    cx.simulate_click(button.center(), Modifiers::default());
+    draw(&mut cx);
+    workspace.update_in(&mut cx, |this, window, cx| {
+        this.toggle_command_manager(window, cx);
+        this.toggle_command_manager(window, cx);
+        this.enter_command_group(Some("builtin-windows".into()), window, cx);
+    });
+    draw(&mut cx);
+    workspace.read_with(&cx, |this, cx| {
+        assert!(this.filtered_saved_commands(cx).iter().all(|row| row.id != "builtin:windows_pwd"));
+        assert!(this.filtered_saved_commands(cx).iter().any(|row| row.id == copy.id));
+        assert!(this.command_manager_open && this.tabs.is_empty());
+    });
 }

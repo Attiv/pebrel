@@ -81,25 +81,9 @@ impl NebulaWorkspace {
     }
 
     fn available_saved_commands(&self, cx: &App) -> Vec<crate::saved_commands::SavedCommand> {
-        use crate::saved_commands::builtins::CommandPlatform;
-        let remote = self
-            .tabs
-            .get(self.active)
-            .and_then(WorkspaceTab::focused_view)
-            .is_some_and(|view| view.read(cx).is_remote_session());
-        let platform = if remote {
-            CommandPlatform::Posix
-        } else if cfg!(windows) {
-            CommandPlatform::Windows
-        } else if cfg!(target_os = "macos") {
-            CommandPlatform::Mac
-        } else {
-            CommandPlatform::Posix
-        };
         let mut commands = self.saved_commands.commands().to_vec();
         commands.extend(
-            self.saved_commands
-                .builtin_commands(crate::gpui_shell::config::ui_language(cx), platform),
+            self.saved_commands.builtin_commands(crate::gpui_shell::config::ui_language(cx)),
         );
         self.sort_command_groups(&mut commands, cx);
         commands
@@ -382,8 +366,12 @@ impl NebulaWorkspace {
                         .child(Button::new("saved-command-cancel").label(cancel_label)),
                 )
                 .child(
-                    DialogAction::new()
-                        .child(Button::new("saved-command-save").label(save_label).primary()),
+                    DialogAction::new().child(
+                        Button::new("saved-command-save")
+                            .debug_selector(|| "saved-command-save".into())
+                            .label(save_label)
+                            .primary(),
+                    ),
                 );
 
             center_modal_dialog(dialog, window, EDITOR_DIALOG_HEIGHT)

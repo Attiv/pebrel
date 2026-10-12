@@ -165,6 +165,7 @@ impl NebulaWorkspace {
                     )
                     .child(
                         Button::new(SharedString::from(format!("saved-command-copy-{index}")))
+                            .debug_selector(move || format!("saved-command-copy-{index}"))
                             .icon(IconName::Copy)
                             .ghost()
                             .xsmall()
@@ -176,6 +177,7 @@ impl NebulaWorkspace {
                     )
                     .child(
                         Button::new(SharedString::from(format!("saved-command-edit-{index}")))
+                            .debug_selector(move || format!("saved-command-edit-{index}"))
                             .icon(custom_icon(crate::gpui_shell::assets::nav::PENCIL))
                             .ghost()
                             .xsmall()

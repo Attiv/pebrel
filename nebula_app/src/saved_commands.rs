@@ -2,6 +2,7 @@
 
 pub(crate) mod builtins;
 mod groups;
+pub(crate) use builtins::{is_system_group, system_groups};
 pub(crate) use groups::BUILTIN_GROUP_ID;
 
 use std::collections::{BTreeSet, HashSet};
@@ -105,12 +106,8 @@ impl SavedCommands {
         &self.commands
     }
 
-    pub(crate) fn builtin_commands(
-        &self,
-        language: crate::i18n::UiLanguage,
-        platform: builtins::CommandPlatform,
-    ) -> Vec<SavedCommand> {
-        builtins::commands(language, platform)
+    pub(crate) fn builtin_commands(&self, language: crate::i18n::UiLanguage) -> Vec<SavedCommand> {
+        builtins::commands(language)
             .into_iter()
             .filter(|command| !self.deleted_builtins.contains(&command.id))
             .collect()
@@ -318,7 +315,6 @@ mod tests {
     #[test]
     fn builtin_deletion_survives_reload_and_other_window_edits() {
         use crate::i18n::UiLanguage;
-        use builtins::CommandPlatform;
 
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(STORE_FILE);
@@ -336,13 +332,12 @@ mod tests {
         assert_eq!(reloaded.groups()[0].id, group);
         assert!(!reloaded.organization.membership.contains_key("builtin:docker_exec"));
         for language in [UiLanguage::EnUs, UiLanguage::ZhCn] {
-            for platform in [CommandPlatform::Windows, CommandPlatform::Mac, CommandPlatform::Posix]
-            {
-                let commands = reloaded.builtin_commands(language, platform);
-                assert!(commands.iter().all(|row| row.id != "builtin:docker_exec"
-                    && row.id != "builtin:python_install_windows"));
-                assert!(commands.iter().any(|row| row.id == "builtin:conda_create"));
-            }
+            let commands = reloaded.builtin_commands(language);
+            assert!(
+                commands.iter().all(|row| row.id != "builtin:docker_exec"
+                    && row.id != "builtin:python_install_windows")
+            );
+            assert!(commands.iter().any(|row| row.id == "builtin:conda_create"));
         }
         let bytes = std::fs::read(&path).unwrap();
         assert!(other_window.move_to_group("builtin:docker_exec", Some(&group)).is_err());
