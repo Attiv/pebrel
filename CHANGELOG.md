@@ -4,6 +4,46 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.2.4 - 2026-10-12
+
+### English
+
+#### Added
+
+- Expanded the top-right command manager to 146 built-in command templates: 60 for Linux, 40 for macOS, 40 for Windows PowerShell, and 6 shared Docker/Conda templates.
+- Added always-accessible Linux, macOS and Windows (PowerShell) folders, with English and Simplified Chinese purpose labels and platform/tool requirements. Existing search, copy, insert, save-copy, move and hide actions remain available.
+- Templates insert without submitting Enter, so parameters can be reviewed or edited before running. Existing custom commands, explicit group assignments and hidden templates are preserved.
+
+### 中文
+
+#### 新增
+
+- 右上角命令管理器的内置命令库扩充至 146 条模板：Linux 60 条、macOS 40 条、Windows PowerShell 40 条，以及通用 Docker/Conda 模板 6 条。
+- 新增始终可访问的 Linux、macOS、Windows（PowerShell）平台分组，提供中英用途名称及平台、工具要求说明；保留现有搜索、复制、插入、另存副本、移动和隐藏操作。
+- 模板只插入，不自动按 Enter 执行，可先检查或修改参数再运行；保留已有自定义命令、显式分组和隐藏记录。
+
+### Contributors
+
+| Contributor | Contributions |
+| --- | --- |
+| [wlkhn123](https://github.com/wlkhn123) | Built-in platform command catalogues / 平台分组内置命令库 |
+
+---
+
+**SHA256**
+
+- `Pebrel-v2.2.4-linux-x64-preview.AppImage`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-linux-x64-preview.deb`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-linux-x64-preview.tar.gz`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-macos-x64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-android-universal-preview.apk`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.4-relay-manual.tar.gz`: `PENDING FINAL BUILD`
+
 ## 2.2.3 - 2026-10-10
 
 ### English
