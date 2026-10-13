@@ -28,12 +28,16 @@ use crate::proxy_test::{ProxyTestFailure, ProxyTestOutcome, ProxyTestResult, Pro
 mod agent;
 pub(crate) mod completion;
 mod config;
+#[cfg(test)]
+use config::parse_remote_forward;
+use config::parse_resolved_config;
 mod exec;
 mod forward;
 mod integration;
 mod lifecycle;
 mod route;
 mod transcript;
+pub use forward::{ForwardFailureReason, ForwardWarning};
 pub(crate) use forward::{LocalForward, PortForward, open_local_forward, open_remote_forward};
 pub(crate) use integration::setup_cli as setup_ai_cli;
 use route::{ResolvedRoute, RouteTransport};
@@ -93,6 +97,9 @@ pub trait SshEventHost:
     /// A read capability belongs to this pane's live authenticated transport.
     fn ssh_transcript_reader(&self, _reader: Option<TranscriptReader>) {}
 
+    /// Optional configured forwarding failures are independent of progress.
+    fn ssh_forward_warning(&self, _warning: ForwardWarning) {}
+
     /// 连接阶段变化（连接卡片/横幅的数据源）。默认丢弃。
     fn ssh_stage(&self, stage: SshStage) {
         let _ = stage;
@@ -101,10 +108,14 @@ pub trait SshEventHost:
 
 #[cfg(feature = "legacy-shell")]
 impl SshEventHost for EventProxy {
+    fn ssh_forward_warning(&self, warning: ForwardWarning) {
+        self.send_event(crate::event::EventType::SshConnect(SshEvent::ForwardWarning(warning)));
+    }
+
     fn ssh_stage(&self, stage: SshStage) {
         // [`EventProxy`] 自带 `tab_id`，后台 runtime 不需要知道 pane id
         // 或 window id（固有 `send_event(EventType)`，非 trait 方法）。
-        self.send_event(crate::event::EventType::SshConnect(stage));
+        self.send_event(crate::event::EventType::SshConnect(SshEvent::Stage(stage)));
     }
 }
 
@@ -137,6 +148,13 @@ pub enum SshStage {
     Ready,
     /// 连接失败，附带面向用户的原因。
     Failed(String),
+}
+
+/// Ordered pane-owned connection facts; warnings never alter the stage machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SshEvent {
+    Stage(SshStage),
+    ForwardWarning(ForwardWarning),
 }
 
 /// 向拥有该 pane 的窗口上报连接阶段（[`SshEventHost::ssh_stage`]）。
@@ -222,6 +240,7 @@ pub struct SshDestination {
     identity_files: Vec<PathBuf>,
     proxy_jump: Option<String>,
     remote_forwards: Vec<RemoteForwardSpec>,
+    exit_on_forward_failure: bool,
 }
 
 impl SshDestination {
@@ -244,6 +263,7 @@ impl SshDestination {
             identity_files: Vec::new(),
             proxy_jump: None,
             remote_forwards: Vec::new(),
+            exit_on_forward_failure: false,
         })
     }
 
@@ -314,6 +334,7 @@ impl SshDestination {
             identity_files: default_identity_files(),
             proxy_jump: None,
             remote_forwards: Vec::new(),
+            exit_on_forward_failure: false,
         })
     }
 
@@ -375,73 +396,6 @@ fn parse_host_port_optional(host_port: &str) -> io::Result<(String, Option<u16>)
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH 主机为空"));
     }
     Ok((host, port))
-}
-
-fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
-    let mut user = None;
-    let mut host = None;
-    let mut port = None;
-    let mut identity_files = Vec::new();
-    let mut proxy_jump = None;
-    let mut remote_forwards = Vec::new();
-    for line in text.lines() {
-        let tokens = crate::ssh::ssh_config_tokens(line);
-        let Some(key) = tokens.first() else { continue };
-        let value = tokens[1..].join(" ");
-        if value.is_empty() {
-            continue;
-        }
-        match key.to_ascii_lowercase().as_str() {
-            "user" if user.is_none() => user = Some(value.to_owned()),
-            "hostname" if host.is_none() => host = Some(value.to_owned()),
-            "port" if port.is_none() => port = value.parse().ok(),
-            "identityfile" => {
-                if !value.eq_ignore_ascii_case("none") {
-                    identity_files.push(expand_home(&value));
-                }
-            },
-            "proxyjump" if !value.eq_ignore_ascii_case("none") => {
-                proxy_jump = Some(value);
-            },
-            "remoteforward" => {
-                remote_forwards.push(parse_remote_forward(&tokens[1..])?);
-            },
-            _ => {},
-        }
-    }
-    Some(SshDestination {
-        original: original.to_owned(),
-        user: user?,
-        host: host?,
-        port: port.unwrap_or(22),
-        identity_files,
-        proxy_jump,
-        remote_forwards,
-    })
-}
-
-fn parse_remote_forward(values: &[String]) -> Option<RemoteForwardSpec> {
-    if values.len() != 2 {
-        return None;
-    }
-    // OpenSSH's `ssh -G` brackets TCP hosts, including IPv4 addresses and names.
-    let remote_port = if let Some((bind_host, port)) = values[0].rsplit_once(':') {
-        if !matches!(bind_host, "localhost" | "127.0.0.1" | "[localhost]" | "[127.0.0.1]") {
-            return None;
-        }
-        port
-    } else {
-        values[0].as_str()
-    }
-    .parse::<u16>()
-    .ok()
-    .filter(|port| *port != 0)?;
-    let (local_host, local_port) = values[1].rsplit_once(':')?;
-    if !matches!(local_host, "localhost" | "127.0.0.1" | "[localhost]" | "[127.0.0.1]") {
-        return None;
-    }
-    let local_port = local_port.parse::<u16>().ok().filter(|port| *port != 0)?;
-    Some(RemoteForwardSpec { remote_port, local_port })
 }
 
 fn find_ssh() -> PathBuf {

@@ -468,3 +468,54 @@ fn all_keys_failing_locally_is_not_reported_as_server_rejection() {
     assert!(partial.contains("服务器拒绝"), "实际文案: {partial}");
     assert!(partial.contains("本地密钥问题"), "实际文案: {partial}");
 }
+
+#[test]
+fn forward_failure_policy_defaults_to_no_and_parses_case_insensitive_yes_no() {
+    for (directive, expected) in
+        [("", false), ("exitonforwardfailure no\n", false), ("ExitOnForwardFailure YeS\n", true)]
+    {
+        let expanded = format!("user fixture\nhostname example.invalid\n{directive}");
+        assert_eq!(
+            parse_resolved_config("fixture", &expanded).unwrap().exit_on_forward_failure,
+            expected
+        );
+        let raw = format!("Host fixture\n User fixture\n HostName example.invalid\n {directive}");
+        assert_eq!(
+            resolve_from_ssh_config_text("fixture", &raw).unwrap().unwrap().exit_on_forward_failure,
+            expected
+        );
+    }
+    for bad in ["true", "1", "sometimes"] {
+        let expanded =
+            format!("user fixture\nhostname example.invalid\nexitonforwardfailure {bad}\n");
+        assert!(parse_resolved_config("fixture", &expanded).is_none());
+        let raw = format!("Host fixture\n ExitOnForwardFailure {bad}\n");
+        assert!(resolve_from_ssh_config_text("fixture", &raw).is_err());
+    }
+}
+
+#[test]
+fn fallback_forward_policy_is_first_value_wins_and_does_not_leak_inactive_blocks() {
+    let raw = "Host other\n ExitOnForwardFailure yes\nHost fixture\n ExitOnForwardFailure NO\nHost *\n ExitOnForwardFailure yes\n";
+    let resolved = resolve_from_ssh_config_text("fixture", raw).unwrap().unwrap();
+    assert!(!resolved.exit_on_forward_failure);
+    let raw = "ExitOnForwardFailure YES\nHost fixture\n ExitOnForwardFailure no\n";
+    assert!(resolve_from_ssh_config_text("fixture", raw).unwrap().unwrap().exit_on_forward_failure);
+}
+
+#[test]
+fn system_openssh_forward_policy_unset_no_yes_matches_parser() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("config");
+    for (directive, expected) in
+        [("", false), ("ExitOnForwardFailure no\n", false), ("ExitOnForwardFailure yes\n", true)]
+    {
+        std::fs::write(&config, format!("Host fixture\n HostName example.invalid\n User fixture\n RemoteForward 9000 localhost:3000\n {directive}")).unwrap();
+        let output = super::ssh_config_command("fixture", Some(&config)).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let destination =
+            parse_resolved_config("fixture", &String::from_utf8_lossy(&output.stdout)).unwrap();
+        assert_eq!(destination.exit_on_forward_failure, expected);
+        assert_eq!(destination.remote_forwards.len(), 1);
+    }
+}

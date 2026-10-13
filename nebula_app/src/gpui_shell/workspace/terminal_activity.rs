@@ -112,6 +112,25 @@ impl NebulaWorkspace {
                     );
                 }
             },
+            TerminalViewEvent::SshForwardWarning(warning) => {
+                if let Some((_, pane_id)) = self.locate_pane(view.entity_id())
+                    && let Some(destination) = view.read(cx).ready_ssh_destination()
+                {
+                    let text = crate::display::ssh_connect::forward_warning_message(
+                        warning,
+                        destination,
+                        crate::gpui_shell::config::ui_language(cx),
+                    );
+                    crate::gpui_shell::toast::banner_for_pane(
+                        window,
+                        cx,
+                        crate::display::ToastKind::Warning,
+                        text,
+                        pane_id,
+                        &crate::notify::Notification::Text { program: None, body: String::new() },
+                    );
+                }
+            },
             TerminalViewEvent::Notification(notification) => {
                 if let Some((_, pane_id)) = self.locate_pane(view.entity_id()) {
                     self.deliver_pane_notification(pane_id, notification.clone(), window, cx);
@@ -259,5 +278,141 @@ mod tests {
         check(0, false, false, false, [1, 1, 0]);
         check(0, false, false, true, [0, 0, 0]);
         check(0, false, false, false, [1, 1, 0]);
+    }
+    #[gpui::test]
+    fn ssh_forward_warning_is_rendered_for_its_origin_and_closed_panes_cannot_replay_it(
+        cx: &mut TestAppContext,
+    ) {
+        use crate::ssh_session::{ForwardFailureReason, ForwardWarning, SshEvent, SshStage};
+        use gpui::BorrowAppContext as _;
+        use gpui_component::WindowExt as _;
+        let _settings_lock = crate::gpui_shell::settings_fixture::lock_theme_studio();
+        cx.update(|cx| {
+            gpui_component::init(cx);
+            crate::gpui_shell::init(cx, None);
+            windowing::initialize(cx, crate::runtime_api::RuntimeHub::new());
+            cx.set_reduce_motion(true);
+            cx.update_global::<crate::gpui_shell::config::Settings, _>(|settings, _| {
+                settings.ai_toasts = false;
+                settings.ui_language = crate::display::UiLanguage::EnUs;
+            });
+        });
+        let mut workspace_out = None;
+        let mut source_out = None;
+        let mut source_id = 0;
+        let (_, window) = cx.add_window_view(|window, cx| {
+            let workspace = cx.new(|cx| {
+                NebulaWorkspace::new(
+                    window,
+                    None,
+                    None,
+                    1,
+                    crate::runtime_api::RuntimeHub::new(),
+                    windowing::WorkspaceStartup::Empty,
+                    windowing::WindowRole::Regular,
+                    cx,
+                )
+            });
+            workspace.update(cx, |workspace, cx| {
+                let panes: Vec<_> = (0..2)
+                    .map(|_| {
+                        workspace.new_pane(
+                            (80, 24),
+                            TerminalLaunch::Local {
+                                cwd: None,
+                                shell: Some(nebula_terminal::tty::Shell::new(
+                                    "pebrel-test-missing-shell-executable".into(),
+                                    vec![],
+                                )),
+                                shell_name: None,
+                            },
+                            None,
+                            window,
+                            cx,
+                        )
+                    })
+                    .collect();
+                source_id = panes[0].id;
+                source_out = Some(panes[0].view.clone());
+                for (index, pane) in panes.iter().enumerate() {
+                    pane.view.update(cx, |view, cx| {
+                        let _ = view.install_completion_test_session();
+                        view.ssh_destination = Some(format!("fixture-{index}@example.invalid"));
+                        if index == 0 {
+                            view.ssh_connection_test_event(SshEvent::Stage(SshStage::Ready), cx);
+                        }
+                    });
+                }
+                let mut tree = SplitTree::Leaf(panes[0].id);
+                tree.split_leaf(panes[0].id, panes[1].id, SplitDirection::LeftRight, 0.5);
+                workspace.tabs.push(WorkspaceTab::Terminal {
+                    focused: panes[1].id,
+                    panes,
+                    tree,
+                    zoomed: false,
+                    broadcast: false,
+                });
+                workspace.active = 0;
+                workspace.focus_active(window, cx);
+            });
+            workspace_out = Some(workspace.clone());
+            Root::new(workspace, window, cx)
+        });
+        let mut window = window.clone();
+        let workspace = workspace_out.unwrap();
+        let source = source_out.unwrap();
+        draw(&mut window);
+        let warning = ForwardWarning {
+            remote_port: 9000,
+            local_port: 3000,
+            failed_count: 1,
+            reason: ForwardFailureReason::Refused,
+        };
+        source.update(&mut window, |view, cx| {
+            view.ssh_connection_test_event(SshEvent::ForwardWarning(warning.clone()), cx);
+            assert_eq!(view.ready_ssh_destination(), Some("fixture-0@example.invalid"));
+        });
+        window.run_until_parked();
+        window.background_executor.advance_clock(std::time::Duration::from_millis(200));
+        draw(&mut window);
+        let notices = window.update(|window, cx| window.notifications(cx));
+        assert_eq!(notices.len(), 1, "warning is not controlled by the AI notification preference");
+        let bounds = window
+            .debug_bounds("notification-stack")
+            .expect("warning is rendered on the real workspace notification layer");
+        assert!(bounds.size.width >= px(200.) && bounds.size.height >= px(24.));
+        let destination =
+            window.update(|_, cx| source.read(cx).ready_ssh_destination().unwrap().to_owned());
+        let message = crate::display::ssh_connect::forward_warning_message(
+            &warning,
+            &destination,
+            crate::display::UiLanguage::EnUs,
+        );
+        assert!(message.contains("fixture-0@example.invalid") && !message.contains("fixture-1"));
+        assert!(
+            message.contains("9000")
+                && message.contains("3000")
+                && message.contains("server refused")
+        );
+        // Late results for a closed source cannot use the remaining pane's identity.
+        workspace.update(&mut window, |workspace, cx| {
+            if let WorkspaceTab::Terminal { panes, tree, .. } = &mut workspace.tabs[0] {
+                panes.retain(|pane| pane.id != source_id);
+                tree.remove_leaf(source_id);
+            }
+            cx.notify();
+        });
+        source.update(&mut window, |view, cx| {
+            view.ssh_connection_test_event(
+                SshEvent::ForwardWarning(ForwardWarning { remote_port: 9001, ..warning }),
+                cx,
+            );
+        });
+        window.run_until_parked();
+        let after = window.update(|window, cx| window.notifications(cx));
+        assert_eq!(
+            after.iter().map(|note| note.entity_id()).collect::<Vec<_>>(),
+            notices.iter().map(|note| note.entity_id()).collect::<Vec<_>>()
+        );
     }
 }

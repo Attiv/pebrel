@@ -156,22 +156,56 @@ fn input_bridge(receiver: Receiver<Msg>) -> (mpsc::UnboundedReceiver<Msg>, watch
 }
 
 async fn ensure_configured_remote_forwards(
-    destination: &str,
     resolved: &SshDestination,
     acquired: &super::AcquiredSession,
-) -> Result<(), SessionError> {
+) -> Result<Option<super::ForwardWarning>, SessionError> {
+    let mut warning: Option<super::ForwardWarning> = None;
     let mut owners = acquired.remote_forward_owners.lock().await;
     for forward in &resolved.remote_forwards {
         let key = (forward.remote_port, forward.local_port);
         if owners.contains_key(&key) {
             continue;
         }
-        let handle =
-            super::open_remote_forward(destination, forward.remote_port, forward.local_port)
-                .await?;
-        owners.insert(key, handle);
+        match super::forward::open_remote_forward_on(
+            acquired,
+            forward.remote_port,
+            forward.local_port,
+        )
+        .await
+        {
+            Ok(handle) => {
+                owners.insert(key, handle);
+            },
+            Err(error) => {
+                if !resolved.exit_on_forward_failure
+                    && let Some(reason) = error.optional_reason()
+                {
+                    log::warn!(
+                        "SSH configured RemoteForward {} -> localhost:{} unavailable: {error}",
+                        forward.remote_port,
+                        forward.local_port
+                    );
+                    if let Some(warning) = &mut warning {
+                        warning.failed_count += 1;
+                    } else {
+                        warning = Some(super::ForwardWarning {
+                            remote_port: forward.remote_port,
+                            local_port: forward.local_port,
+                            reason,
+                            failed_count: 1,
+                        });
+                    }
+                } else {
+                    return Err(io::Error::other(format!(
+                        "SSH RemoteForward {} -> localhost:{} failed: {error}",
+                        forward.remote_port, forward.local_port
+                    ))
+                    .into());
+                }
+            },
+        }
     }
-    Ok(())
+    Ok(warning)
 }
 
 pub(super) async fn run<H: SshEventHost>(
@@ -198,7 +232,7 @@ pub(super) async fn run<H: SshEventHost>(
         .await??;
         let mut acquired =
             super::authenticated_session_at(&resolved, &profile, Some(&event_proxy), 0).await?;
-        ensure_configured_remote_forwards(&destination, &resolved, &acquired).await?;
+        let mut warning = ensure_configured_remote_forwards(&resolved, &acquired).await?;
         let (mut channel, hook_token) =
             match open_shell(&acquired, initial_size, initial_remote_cwd.as_deref(), &event_proxy)
                 .await
@@ -210,7 +244,7 @@ pub(super) async fn run<H: SshEventHost>(
                     acquired =
                         super::authenticated_session_at(&resolved, &profile, Some(&event_proxy), 0)
                             .await?;
-                    ensure_configured_remote_forwards(&destination, &resolved, &acquired).await?;
+                    warning = ensure_configured_remote_forwards(&resolved, &acquired).await?;
                     open_shell(&acquired, initial_size, initial_remote_cwd.as_deref(), &event_proxy)
                         .await?
                 },
@@ -220,6 +254,9 @@ pub(super) async fn run<H: SshEventHost>(
             super::transcript::TranscriptScope::new(&acquired.session);
         event_proxy.ssh_transcript_reader(Some(reader));
         super::report_stage(Some(&event_proxy), SshStage::Ready);
+        if let Some(warning) = warning {
+            event_proxy.ssh_forward_warning(warning);
+        }
         let result =
             pump(&mut channel, hook_token, initial_size, &terminal, &event_proxy, &mut input).await;
         if result.is_err() || acquired.session.is_closed() {

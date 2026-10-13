@@ -1518,5 +1518,10 @@
     "save_failed": "效果列表保存失败，请检查设置目录的写入权限后重试。",
     "advanced": "高级效果",
     "advanced_active": "高级效果 · 终端效果已启用"
+  },
+  "ssh": {
+    "forward_warning": "已连接 {destination}；{count} 项 RemoteForward 不可用。首项：{remote_port} → localhost:{local_port}（{reason}）。",
+    "forward_refused": "服务器拒绝转发",
+    "forward_conflict": "远端端口已被转发请求占用"
   }
 }

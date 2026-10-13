@@ -5,6 +5,61 @@ use tokio::task::{JoinHandle, JoinSet};
 
 use super::{NoopSshEventHost, SessionError, SharedSession, SshDestination, authenticated_session};
 
+/// Only forwarding unavailability is optional; transport/internal errors are fatal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForwardFailureReason {
+    Refused,
+    Conflict,
+}
+
+/// Bounded summary of startup failures on one pane's acquired transport.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForwardWarning {
+    pub remote_port: u16,
+    pub local_port: u16,
+    pub reason: ForwardFailureReason,
+    pub failed_count: usize,
+}
+
+#[derive(Debug)]
+pub(super) enum ForwardError {
+    Refused(russh::Error),
+    Conflict(u16),
+    Fatal(SessionError),
+}
+
+impl ForwardError {
+    pub(super) fn optional_reason(&self) -> Option<ForwardFailureReason> {
+        match self {
+            Self::Refused(_) => Some(ForwardFailureReason::Refused),
+            Self::Conflict(_) => Some(ForwardFailureReason::Conflict),
+            Self::Fatal(_) => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ForwardError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(error) => error.fmt(f),
+            Self::Conflict(port) => {
+                write!(f, "remote port {port} is already reserved for forwarding")
+            },
+            Self::Fatal(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ForwardError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Refused(error) => Some(error),
+            Self::Conflict(_) => None,
+            Self::Fatal(error) => Some(error.as_ref()),
+        }
+    }
+}
+
 // Bound per-listener channel tasks and copy buffers; excess clients wait in the TCP backlog.
 const MAX_CONNECTIONS: usize = 64;
 
@@ -165,31 +220,49 @@ pub(crate) async fn open_remote_forward(
     let acquired =
         super::authenticated_session_at(&destination, &profile, None::<&NoopSshEventHost>, 0)
             .await?;
+    open_remote_forward_on(&acquired, remote_port, local_port).await.map_err(Into::into)
+}
+
+pub(super) async fn open_remote_forward_on(
+    acquired: &super::AcquiredSession,
+    remote_port: u16,
+    local_port: u16,
+) -> Result<PortForward, ForwardError> {
     {
-        let mut routes =
-            acquired.remote_forward_routes.lock().map_err(|_| "SSH 远端转发路由表已损坏")?;
+        let mut routes = acquired.remote_forward_routes.lock().map_err(|_| {
+            ForwardError::Fatal("SSH remote forwarding route table is poisoned".into())
+        })?;
         if routes.contains_key(&remote_port) {
-            return Err(format!("SSH 远端端口 {remote_port} 已在转发").into());
+            return Err(ForwardError::Conflict(remote_port));
         }
         routes.insert(remote_port, super::RemoteForwardRoute::Pending);
     }
     if let Err(error) = acquired.session.tcpip_forward("127.0.0.1", u32::from(remote_port)).await {
-        if let Ok(mut routes) = acquired.remote_forward_routes.lock() {
-            routes.remove(&remote_port);
-        }
-        return Err(error.into());
+        // Cleanup can fail independently of the server's reply. A refusal must
+        // not turn a poisoned internal route table into optional unavailability.
+        acquired
+            .remote_forward_routes
+            .lock()
+            .map_err(|_| {
+                ForwardError::Fatal("SSH remote forwarding route table is poisoned".into())
+            })?
+            .remove(&remote_port);
+        return Err(match error {
+            russh::Error::RequestDenied => ForwardError::Refused(error),
+            error => ForwardError::Fatal(error.into()),
+        });
     }
     if let Ok(mut routes) = acquired.remote_forward_routes.lock() {
         routes.insert(remote_port, super::RemoteForwardRoute::Active(local_port));
     } else {
         let _ = acquired.session.cancel_tcpip_forward("127.0.0.1", u32::from(remote_port)).await;
-        return Err("SSH 远端转发路由表已损坏".into());
+        return Err(ForwardError::Fatal("SSH remote forwarding route table is poisoned".into()));
     }
     Ok(PortForward::Remote(RemoteForward {
         local_port,
         remote_port,
-        session: acquired.session,
-        routes: acquired.remote_forward_routes,
+        session: acquired.session.clone(),
+        routes: acquired.remote_forward_routes.clone(),
     }))
 }
 

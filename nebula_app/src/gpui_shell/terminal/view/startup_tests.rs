@@ -25,6 +25,14 @@ impl TerminalView {
         receiver
     }
 
+    pub(crate) fn ssh_connection_test_event(
+        &mut self,
+        event: crate::ssh_session::SshEvent,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.apply_ssh_event(event, cx);
+    }
+
     pub(crate) fn completion_test_state(
         &self,
     ) -> (String, bool, usize, bool, crate::display::CompletionStyle) {

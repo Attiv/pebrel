@@ -24,7 +24,7 @@ use nebula_terminal::tty::EventedPty as _;
 #[derive(Clone)]
 pub struct EventProxy {
     events: super::event_mailbox::EventSender,
-    stages: UnboundedSender<crate::ssh_session::SshStage>,
+    stages: UnboundedSender<crate::ssh_session::SshEvent>,
     remote_reader: Arc<std::sync::Mutex<Option<crate::ssh_session::TranscriptReader>>>,
 }
 
@@ -40,8 +40,11 @@ impl crate::ssh_session::SshEventHost for EventProxy {
             *current = reader;
         }
     }
+    fn ssh_forward_warning(&self, warning: crate::ssh_session::ForwardWarning) {
+        let _ = self.stages.unbounded_send(crate::ssh_session::SshEvent::ForwardWarning(warning));
+    }
     fn ssh_stage(&self, stage: crate::ssh_session::SshStage) {
-        let _ = self.stages.unbounded_send(stage);
+        let _ = self.stages.unbounded_send(crate::ssh_session::SshEvent::Stage(stage));
     }
 }
 
@@ -115,7 +118,7 @@ pub(super) fn test_session_with_events() -> (
 pub type SpawnedSession = (
     TerminalSession,
     super::event_mailbox::EventReceiver,
-    UnboundedReceiver<crate::ssh_session::SshStage>,
+    UnboundedReceiver<crate::ssh_session::SshEvent>,
 );
 
 /// 启动一个本地 shell 会话。尺寸随后由首帧 prepaint 按真实布局重设；

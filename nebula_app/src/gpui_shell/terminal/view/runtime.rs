@@ -98,6 +98,19 @@ impl TerminalView {
         self.last_ai_session_probe = None;
     }
 
+    pub(in crate::gpui_shell::terminal) fn apply_ssh_event(
+        &mut self,
+        event: crate::ssh_session::SshEvent,
+        cx: &mut Context<'_, Self>,
+    ) {
+        match event {
+            crate::ssh_session::SshEvent::Stage(stage) => self.apply_ssh_stage(stage, cx),
+            crate::ssh_session::SshEvent::ForwardWarning(warning) => {
+                self.apply_ssh_forward_warning(warning, cx)
+            },
+        }
+    }
+
     pub(in crate::gpui_shell::terminal) fn apply_ssh_stage(
         &mut self,
         stage: crate::ssh_session::SshStage,
@@ -124,6 +137,19 @@ impl TerminalView {
         }
         cx.emit(TerminalViewEvent::TitleChanged);
         cx.notify();
+    }
+
+    pub(in crate::gpui_shell::terminal) fn apply_ssh_forward_warning(
+        &mut self,
+        warning: crate::ssh_session::ForwardWarning,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if self.ssh_destination.is_some()
+            && matches!(self.ssh_stage, Some(crate::ssh_session::SshStage::Ready))
+            && self.exited.is_none()
+        {
+            cx.emit(TerminalViewEvent::SshForwardWarning(warning));
+        }
     }
 
     /// Clear foreground Agent identity after an authoritative command end or

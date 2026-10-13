@@ -757,7 +757,7 @@ impl ApplicationHandler<Event> for Processor {
                 if let (Some(window_context), Some(pane)) =
                     (self.windows.get_mut(window_id), tab_id)
                 {
-                    window_context.ssh_connect_stage(pane, stage);
+                    window_context.ssh_connection_event(pane, stage);
                     window_context.dirty = true;
                     window_context.display.window.request_redraw();
                 }

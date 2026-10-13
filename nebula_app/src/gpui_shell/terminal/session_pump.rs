@@ -6,7 +6,7 @@ use nebula_terminal::event::Event as TermEvent;
 
 pub(super) fn attach(
     mut rx: super::event_mailbox::EventReceiver,
-    mut stage_rx: futures::channel::mpsc::UnboundedReceiver<crate::ssh_session::SshStage>,
+    mut stage_rx: futures::channel::mpsc::UnboundedReceiver<crate::ssh_session::SshEvent>,
     is_ssh: bool,
     cx: &mut Context<TerminalView>,
 ) {
@@ -46,7 +46,7 @@ pub(super) fn attach(
             while let Some(stage) = stage_rx.next().await {
                 if this
                     .update(cx, |view: &mut TerminalView, cx| {
-                        view.apply_ssh_stage(stage, cx);
+                        view.apply_ssh_event(stage, cx);
                     })
                     .is_err()
                 {

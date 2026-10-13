@@ -234,3 +234,43 @@ fn ssh_exit_and_failure_cancel_pending_forward_and_hide_remote_actions(cx: &mut 
         });
     }
 }
+
+#[gpui::test]
+fn optional_forward_warning_keeps_ready_shell_unblocked_and_ignores_stale_stages(
+    cx: &mut TestAppContext,
+) {
+    use crate::ssh_session::{ForwardFailureReason, ForwardWarning, SshEvent, SshStage};
+    let (view, window, receiver) = open(cx);
+    let warnings = Rc::new(Cell::new(0));
+    let count = warnings.clone();
+    let _subscription = window.update(|_, cx| {
+        cx.subscribe(&view, move |_, event, _| {
+            if matches!(event, TerminalViewEvent::SshForwardWarning(_)) {
+                count.set(count.get() + 1);
+            }
+        })
+    });
+    let warning = ForwardWarning {
+        remote_port: 9000,
+        local_port: 3000,
+        failed_count: 1,
+        reason: ForwardFailureReason::Refused,
+    };
+    view.update(window, |view, cx| {
+        view.ssh_destination = Some("fixture@example.invalid".into());
+        view.ssh_connection_test_event(SshEvent::ForwardWarning(warning.clone()), cx);
+        view.ssh_connection_test_event(SshEvent::Stage(SshStage::Ready), cx);
+        view.ssh_connection_test_event(SshEvent::ForwardWarning(warning.clone()), cx);
+        assert!(view.ssh_connect.is_none(), "forward warning must not create a blocking card");
+        assert_eq!(view.ready_ssh_destination(), Some("fixture@example.invalid"));
+        assert!(receiver.try_recv().is_err(), "warning text must never enter remote stdin");
+    });
+    window.run_until_parked();
+    assert_eq!(warnings.get(), 1);
+    view.update(window, |view, cx| {
+        view.ssh_connection_test_event(SshEvent::Stage(SshStage::Failed("closed".into())), cx);
+        view.ssh_connection_test_event(SshEvent::ForwardWarning(warning), cx);
+    });
+    window.run_until_parked();
+    assert_eq!(warnings.get(), 1, "late warning cannot replace a failure with success");
+}

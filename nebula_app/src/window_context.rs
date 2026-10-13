@@ -1914,16 +1914,6 @@ impl WindowContext {
         self.panes.iter().position(|p| p.id == id)
     }
 
-    /// 把后台 SSH runtime 的阶段上报转给 display，顺带补上这个 pane 的目标
-    /// 地址——事件本身只带 pane 身份，地址在 pane 上。
-    pub fn ssh_connect_stage(&mut self, pane: PaneId, stage: crate::ssh_session::SshStage) {
-        let destination = self
-            .pane_index(pane)
-            .and_then(|index| self.panes[index].ssh_destination.clone())
-            .unwrap_or_default();
-        self.display.ssh_connect_stage(pane, destination, stage);
-    }
-
     /// Working directory of the focused pane (from the shell's `NEBULA|cwd|…`
     /// title report) for a new tab/split to inherit. `None` if unknown.
     fn focused_cwd(&self) -> Option<std::path::PathBuf> {

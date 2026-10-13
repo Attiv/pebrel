@@ -185,6 +185,7 @@ pub enum TerminalViewEvent {
     /// 由它负责驻留提示、后台 Tab 标记和系统通知；raw context 不进入文案。
     AiAttention(crate::ai_hook::AttentionContext),
     Notification(crate::notify::Notification),
+    SshForwardWarning(crate::ssh_session::ForwardWarning),
     /// 非应用鼠标模式下右键命中真实终端选区。菜单由 workspace 根持有，
     /// 避免每个 pane 都渲染一份带叠加阴影的 PopupMenu。
     SelectionContextMenuRequested {

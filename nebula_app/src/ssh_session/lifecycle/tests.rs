@@ -17,6 +17,7 @@ struct Events {
     stages: Arc<Mutex<Vec<SshStage>>>,
     replies: Option<mpsc::UnboundedSender<Msg>>,
     hooks: Arc<Mutex<Vec<Vec<u8>>>>,
+    warnings: Arc<Mutex<Vec<crate::ssh_session::ForwardWarning>>>,
 }
 
 impl EventListener for Events {
@@ -36,6 +37,10 @@ impl EventListener for Events {
 }
 
 impl SshEventHost for Events {
+    fn ssh_forward_warning(&self, warning: crate::ssh_session::ForwardWarning) {
+        self.warnings.lock().unwrap().push(warning);
+    }
+
     fn ssh_stage(&self, stage: SshStage) {
         self.stages.lock().unwrap().push(stage);
     }
@@ -71,10 +76,15 @@ enum Mode {
     CompletionMetadata,
     Integration,
     RejectIntegration,
+    AcceptForward,
+    RejectFirstForward,
+    DropForward,
 }
 
 struct Loopback {
     mode: Mode,
+    forward_requests: Arc<std::sync::atomic::AtomicUsize>,
+    forward_handles: mpsc::UnboundedSender<server::Handle>,
     hang: bool,
     data: mpsc::UnboundedSender<Vec<u8>>,
     window_changes: mpsc::UnboundedSender<WindowSize>,
@@ -87,6 +97,34 @@ impl server::Handler for Loopback {
 
     async fn auth_none(&mut self, _user: &str) -> Result<Auth, Self::Error> {
         Ok(Auth::Accept)
+    }
+
+    async fn tcpip_forward(
+        &mut self,
+        address: &str,
+        _port: &mut u32,
+        session: &mut Session,
+    ) -> Result<bool, Self::Error> {
+        assert_eq!(address, "127.0.0.1");
+        let previous = self.forward_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if self.mode == Mode::DropForward {
+            return Err(russh::Error::Disconnect);
+        }
+        let accept = self.mode == Mode::AcceptForward
+            || (self.mode == Mode::RejectFirstForward && previous != 0);
+        if accept {
+            self.forward_handles.send(session.handle()).unwrap();
+        }
+        Ok(accept)
+    }
+
+    async fn cancel_tcpip_forward(
+        &mut self,
+        _address: &str,
+        _port: u32,
+        _session: &mut Session,
+    ) -> Result<bool, Self::Error> {
+        Ok(true)
     }
 
     async fn exec_request(
@@ -498,6 +536,8 @@ fn duplicate_ssh_directory_preserves_literal_paths_and_rejects_control_character
 }
 
 struct Fixture {
+    forward_requests: Arc<std::sync::atomic::AtomicUsize>,
+    forward_handles: mpsc::UnboundedReceiver<server::Handle>,
     route: ResolvedRoute,
     data: mpsc::UnboundedReceiver<Vec<u8>>,
     window_changes: mpsc::UnboundedReceiver<WindowSize>,
@@ -533,6 +573,9 @@ impl Fixture {
         });
         let (data_tx, data) = mpsc::unbounded_channel();
         let (window_changes_tx, window_changes) = mpsc::unbounded_channel();
+        let forward_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let requests = forward_requests.clone();
+        let (forward_handles_tx, forward_handles) = mpsc::unbounded_channel();
         let task = tokio::spawn(async move {
             let mut connections = tokio::task::JoinSet::new();
             let mut first = true;
@@ -541,6 +584,8 @@ impl Fixture {
                 stream.set_nodelay(true).unwrap();
                 let handler = Loopback {
                     mode,
+                    forward_requests: requests.clone(),
+                    forward_handles: forward_handles_tx.clone(),
                     hang: first && mode == Mode::HangFirstConnection,
                     data: data_tx.clone(),
                     window_changes: window_changes_tx.clone(),
@@ -563,7 +608,15 @@ impl Fixture {
             transport: RouteTransport::Direct,
             known_hosts_path: Some(known_hosts),
         };
-        Self { route, data, window_changes, task, _directory: directory }
+        Self {
+            route,
+            data,
+            window_changes,
+            task,
+            forward_requests,
+            forward_handles,
+            _directory: directory,
+        }
     }
 
     async fn connect(&self) -> AcquiredSession {
@@ -1037,5 +1090,292 @@ fn completion_real_ssh_git_and_project_scripts_end_to_end() {
         .await
         .unwrap();
         super::super::evict_pooled_session(&route.pool_key(), &acquired.session).await;
+    });
+}
+
+#[test]
+fn optional_configured_remote_forward_refusal_still_opens_a_usable_shell() {
+    check(async {
+        // The fixture's default global-request handler refuses forwarding while
+        // accepting authentication, PTY and shell requests.
+        let mut fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let denied = acquired.session.tcpip_forward("127.0.0.1", 19001).await.unwrap_err();
+        assert!(matches!(denied, russh::Error::RequestDenied));
+        assert_eq!(denied.to_string(), "The request was rejected by the other party");
+        let mut resolved = fixture.route.destination.clone();
+        resolved
+            .remote_forwards
+            .push(crate::ssh_session::RemoteForwardSpec { remote_port: 19001, local_port: 19002 });
+        let setup = ensure_configured_remote_forwards(&resolved, &acquired).await;
+        assert!(
+            setup.is_ok(),
+            "optional RemoteForward must not stop login: {:?}",
+            setup.as_ref().err()
+        );
+        let warning = setup.unwrap().expect("refusal must be visibly reported");
+        assert_eq!(warning.reason, crate::ssh_session::ForwardFailureReason::Refused);
+        assert_eq!(
+            (warning.remote_port, warning.local_port, warning.failed_count),
+            (19001, 19002, 1)
+        );
+        assert!(acquired.remote_forward_routes.lock().unwrap().is_empty());
+        assert!(acquired.remote_forward_owners.lock().await.is_empty());
+        let events = Events::default();
+        let (mut channel, token) = open_shell(&acquired, size(), None, &events).await.unwrap();
+        let terminal = terminal(&events);
+        let (sender, mut input) = mpsc::unbounded_channel();
+        sender.send(Msg::Input(b"usable shell\r".to_vec().into())).unwrap();
+        let pump = pump(&mut channel, token, size(), &terminal, &events, &mut input);
+        tokio::pin!(pump);
+        tokio::select! {
+            data = fixture.data.recv() => assert_eq!(data.unwrap(), b"usable shell\r"),
+            result = &mut pump => panic!("shell unexpectedly stopped: {result:?}"),
+        }
+        assert!(
+            !events.stages.lock().unwrap().iter().any(|stage| matches!(stage, SshStage::Failed(_)))
+        );
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+fn configured_forward(
+    fixture: &Fixture,
+    strict: bool,
+    remote_port: u16,
+    local_port: u16,
+) -> SshDestination {
+    let mut destination = fixture.route.destination.clone();
+    destination.exit_on_forward_failure = strict;
+    destination.remote_forwards =
+        vec![crate::ssh_session::RemoteForwardSpec { remote_port, local_port }];
+    destination
+}
+
+#[test]
+fn strict_refusal_on_reused_transport_fails_only_that_startup() {
+    check(async {
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let (incumbent, _) = open_shell(&acquired, size(), None, &Events::default()).await.unwrap();
+        let optional = configured_forward(&fixture, false, 19011, 19012);
+        assert!(ensure_configured_remote_forwards(&optional, &acquired).await.unwrap().is_some());
+        let reused = fixture.connect().await;
+        assert!(Arc::ptr_eq(&reused.session, &acquired.session));
+        let mut strict = optional.clone();
+        strict.exit_on_forward_failure = true;
+        let error = ensure_configured_remote_forwards(&strict, &reused).await.unwrap_err();
+        let detail = error.to_string();
+        assert!(detail.contains("RemoteForward 19011 -> localhost:19012"), "{detail}");
+        assert!(detail.contains("The request was rejected"), "{detail}");
+        assert!(reused.remote_forward_routes.lock().unwrap().is_empty());
+        assert!(reused.remote_forward_owners.lock().await.is_empty());
+        assert!(
+            !reused.session.is_closed(),
+            "strict invocation must not evict another pane's transport"
+        );
+        incumbent.data(&b"incumbent still usable"[..]).await.unwrap();
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn broken_forward_transport_is_fatal_for_both_policies_and_clears_pending() {
+    check(async {
+        for strict in [false, true] {
+            let fixture = Fixture::new(Mode::DropForward).await;
+            let acquired = fixture.connect().await;
+            let destination = configured_forward(&fixture, strict, 19021, 19022);
+            let error =
+                ensure_configured_remote_forwards(&destination, &acquired).await.unwrap_err();
+            assert!(!error.to_string().contains("The request was rejected"));
+            assert!(acquired.remote_forward_routes.lock().unwrap().is_empty());
+            assert!(acquired.remote_forward_owners.lock().await.is_empty());
+            fixture.forget(&acquired.session).await;
+        }
+    });
+}
+
+#[test]
+fn explicit_forward_refusal_remains_an_error_and_does_not_reserve_a_route() {
+    check(async {
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let error = crate::ssh_session::forward::open_remote_forward_on(&acquired, 19031, 19032)
+            .await
+            .err()
+            .unwrap();
+        assert!(matches!(
+            error,
+            crate::ssh_session::forward::ForwardError::Refused(russh::Error::RequestDenied)
+        ));
+        assert!(acquired.remote_forward_routes.lock().unwrap().is_empty());
+        assert!(acquired.remote_forward_owners.lock().await.is_empty());
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn accepted_forward_is_reused_and_conflict_keeps_incumbent_routing() {
+    check(async {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let mut fixture = Fixture::new(Mode::AcceptForward).await;
+        let local = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_port = local.local_addr().unwrap().port();
+        let acquired = fixture.connect().await;
+        let destination = configured_forward(&fixture, false, 19041, local_port);
+        assert!(
+            ensure_configured_remote_forwards(&destination, &acquired).await.unwrap().is_none()
+        );
+        let reused = fixture.connect().await;
+        let mut strict = destination.clone();
+        strict.exit_on_forward_failure = true;
+        assert!(ensure_configured_remote_forwards(&strict, &reused).await.unwrap().is_none());
+        assert_eq!(fixture.forward_requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(reused.remote_forward_owners.lock().await.len(), 1);
+        let conflict = configured_forward(&fixture, false, 19041, local_port.saturating_sub(1));
+        let warning = ensure_configured_remote_forwards(&conflict, &reused).await.unwrap().unwrap();
+        assert_eq!(warning.reason, crate::ssh_session::ForwardFailureReason::Conflict);
+        let mut strict_conflict = conflict;
+        strict_conflict.exit_on_forward_failure = true;
+        assert!(ensure_configured_remote_forwards(&strict_conflict, &reused).await.is_err());
+        assert!(
+            matches!(reused.remote_forward_routes.lock().unwrap().get(&19041), Some(crate::ssh_session::RemoteForwardRoute::Active(port)) if *port == local_port)
+        );
+        let handle = fixture.forward_handles.recv().await.unwrap();
+        let opening = handle.channel_open_forwarded_tcpip("127.0.0.1", 19041, "127.0.0.1", 19042);
+        let (channel, accepted) = tokio::join!(opening, local.accept());
+        let mut remote = channel.unwrap().into_stream();
+        let (mut target, _) = accepted.unwrap();
+        remote.write_all(b"correct target").await.unwrap();
+        let mut received = [0; 14];
+        target.read_exact(&mut received).await.unwrap();
+        assert_eq!(&received, b"correct target");
+        assert_eq!(fixture.forward_requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn rejected_forward_can_retry_and_many_failures_produce_one_bounded_summary() {
+    check(async {
+        let fixture = Fixture::new(Mode::RejectFirstForward).await;
+        let acquired = fixture.connect().await;
+        let destination = configured_forward(&fixture, false, 19051, 19052);
+        assert!(
+            ensure_configured_remote_forwards(&destination, &acquired).await.unwrap().is_some()
+        );
+        assert!(
+            ensure_configured_remote_forwards(&destination, &acquired).await.unwrap().is_none()
+        );
+        assert_eq!(acquired.remote_forward_owners.lock().await.len(), 1);
+        assert_eq!(fixture.forward_requests.load(std::sync::atomic::Ordering::Relaxed), 2);
+        fixture.forget(&acquired.session).await;
+
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let mut destination = configured_forward(&fixture, false, 19061, 19062);
+        destination
+            .remote_forwards
+            .push(crate::ssh_session::RemoteForwardSpec { remote_port: 19063, local_port: 19064 });
+        let warning =
+            ensure_configured_remote_forwards(&destination, &acquired).await.unwrap().unwrap();
+        assert_eq!(warning.failed_count, 2);
+        assert_eq!(warning.remote_port, 19061);
+        assert!(acquired.remote_forward_routes.lock().unwrap().is_empty());
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn poisoned_forward_routes_are_never_optional_unavailability() {
+    check(async {
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let routes = acquired.remote_forward_routes.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = routes.lock().unwrap();
+            panic!("fixture route poison");
+        })
+        .join();
+        let destination = configured_forward(&fixture, false, 19071, 19072);
+        let error = ensure_configured_remote_forwards(&destination, &acquired).await.unwrap_err();
+        assert!(error.to_string().contains("poisoned"));
+        assert!(acquired.remote_forward_owners.lock().await.is_empty());
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn route_poison_during_refused_request_is_fatal_not_an_optional_warning() {
+    check(async {
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        let destination = configured_forward(&fixture, false, 19081, 19082);
+        let setup = ensure_configured_remote_forwards(&destination, &acquired);
+        tokio::pin!(setup);
+        // This fixture runs on a current-thread runtime: the first poll reserves
+        // Pending and queues the SSH request, but the server cannot reply yet.
+        assert!(
+            setup
+                .as_mut()
+                .poll(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+                .is_pending()
+        );
+        assert!(matches!(
+            acquired.remote_forward_routes.lock().unwrap().get(&19081),
+            Some(crate::ssh_session::RemoteForwardRoute::Pending)
+        ));
+        let routes = acquired.remote_forward_routes.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = routes.lock().unwrap();
+            panic!("fixture route poison while request is pending");
+        })
+        .join();
+        let error = setup.await.expect_err("failed route cleanup must remain fatal");
+        assert!(error.to_string().contains("poisoned"));
+        assert!(acquired.remote_forward_owners.lock().await.is_empty());
+        fixture.forget(&acquired.session).await;
+    });
+}
+
+#[test]
+fn pending_forward_conflict_preserves_reservation_without_claiming_an_active_tunnel() {
+    check(async {
+        let fixture = Fixture::new(Mode::Open).await;
+        let acquired = fixture.connect().await;
+        acquired
+            .remote_forward_routes
+            .lock()
+            .unwrap()
+            .insert(19091, crate::ssh_session::RemoteForwardRoute::Pending);
+        let destination = configured_forward(&fixture, false, 19091, 19092);
+        let warning =
+            ensure_configured_remote_forwards(&destination, &acquired).await.unwrap().unwrap();
+        assert_eq!(warning.reason, crate::ssh_session::ForwardFailureReason::Conflict);
+        let error = crate::ssh_session::forward::open_remote_forward_on(&acquired, 19091, 19092)
+            .await
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("reserved"), "{error}");
+        let english = crate::display::ssh_connect::forward_warning_message(
+            &warning,
+            "fixture",
+            crate::display::UiLanguage::EnUs,
+        );
+        let chinese = crate::display::ssh_connect::forward_warning_message(
+            &warning,
+            "fixture",
+            crate::display::UiLanguage::ZhCn,
+        );
+        assert!(english.contains("reserved") && !english.contains("already forwarded"));
+        assert!(chinese.contains("占用") && !chinese.contains("已在转发"));
+        assert!(matches!(
+            acquired.remote_forward_routes.lock().unwrap().get(&19091),
+            Some(crate::ssh_session::RemoteForwardRoute::Pending)
+        ));
+        assert!(acquired.remote_forward_owners.lock().await.is_empty());
+        assert_eq!(fixture.forward_requests.load(std::sync::atomic::Ordering::Relaxed), 0);
+        fixture.forget(&acquired.session).await;
     });
 }

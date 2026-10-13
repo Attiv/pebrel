@@ -1072,6 +1072,29 @@ pub(crate) fn stage_message(stage: &SshStage, language: UiLanguage) -> String {
     .to_owned()
 }
 
+pub(crate) fn forward_warning_message(
+    warning: &crate::ssh_session::ForwardWarning,
+    destination: &str,
+    language: UiLanguage,
+) -> String {
+    use crate::i18n::Message;
+    use crate::ssh_session::ForwardFailureReason;
+    let reason = language.text(match warning.reason {
+        ForwardFailureReason::Refused => Message::SshForwardRefused,
+        ForwardFailureReason::Conflict => Message::SshForwardConflict,
+    });
+    language.format(
+        Message::SshForwardWarning,
+        &[
+            ("destination", destination),
+            ("count", &warning.failed_count.to_string()),
+            ("remote_port", &warning.remote_port.to_string()),
+            ("local_port", &warning.local_port.to_string()),
+            ("reason", reason),
+        ],
+    )
+}
+
 pub(crate) fn failure_headline(language: UiLanguage) -> String {
     language.pick("连接失败", "Connection failed").to_owned()
 }

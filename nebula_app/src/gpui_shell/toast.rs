@@ -175,7 +175,9 @@ pub fn render_layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             .overflow_hidden()
             // 用全视口透明宿主明确右下锚点；宿主不注册命中，只有实际
             // Notification 卡片会 occlude/接收鼠标，周围终端仍可正常点击。
-            .child(v_flex().items_end().gap_2().children(items))
+            .child(
+                v_flex().debug_selector(|| "notification-stack".into()).items_end().gap_2().children(items)
+            )
             .into_any_element(),
     )
 }
