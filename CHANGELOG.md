@@ -4,6 +4,44 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.2.6 - 2026-10-13
+
+### English
+
+#### Fixed
+
+- Fixed SSH panel login stopping when a configured remote port forward is refused. With `ExitOnForwardFailure` unset or set to `no`, Pebrel now warns about unavailable forwarding and continues opening the terminal; explicit `yes` still stops that connection attempt.
+- Forwarding warnings identify the unavailable route without reporting it as active. Explicit manual forwarding failures and broken SSH connections still report errors.
+
+### 中文
+
+#### 修复
+
+- 修复配置的远端端口转发被拒绝时，SSH 面板无法继续登录的问题。`ExitOnForwardFailure` 未设置或为 `no` 时，Pebrel 会提示转发不可用并继续打开终端；显式设置为 `yes` 时仍会停止本次连接。
+- 转发警告会说明不可用的路由，不会将其显示为已启用；手动创建转发失败和 SSH 连接中断仍会报告错误。
+
+### Contributors
+
+| Contributor | Contributions |
+| --- | --- |
+| [wlkhn123](https://github.com/wlkhn123) | SSH forwarding compatibility / SSH 转发兼容性修复 |
+
+---
+
+**SHA256**
+
+- `Pebrel-v2.2.6-linux-x64-preview.AppImage`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-linux-x64-preview.deb`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-linux-x64-preview.tar.gz`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-macos-x64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-android-universal-preview.apk`: `PENDING FINAL BUILD`
+- `Pebrel-v2.2.6-relay-manual.tar.gz`: `PENDING FINAL BUILD`
+
 ## 2.2.5 - 2026-10-12
 
 ### English
