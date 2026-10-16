@@ -29,10 +29,7 @@ use super::view::cursor::CursorGeometry;
 
 #[path = "element/color_resolution.rs"]
 mod color_resolution;
-use color_resolution::{
-    is_default_host_cursor, is_default_selection, resolve_app_colors_into, resolve_text_foreground,
-    themed_anchor,
-};
+use color_resolution::{is_default_host_cursor, is_default_selection, themed_anchor};
 pub(super) use color_resolution::{rgb_from_rgba, rgba_rgb};
 
 #[path = "element/codex_emphasis.rs"]
@@ -49,9 +46,15 @@ use label_badges::{LabelPalette, badge_provider, paint_label_badges};
 use label_badges_classifier::{Label, LabelKind};
 use label_badges_snapshot::classify_badge_rows;
 
+mod cell_fit;
 #[cfg(test)]
 #[path = "element/color_tests.rs"]
 mod color_tests;
+mod reading;
+
+#[path = "element/app_colors.rs"]
+mod app_colors;
+use app_colors::{resolve_app_colors_into, resolve_text_foreground};
 
 #[cfg(test)]
 #[path = "element/codex_emphasis_tests.rs"]
@@ -190,14 +193,19 @@ impl TerminalElement {
         self.view.update(cx, |view, _| {
             resolve_app_colors_into(snap, theme, overrides, &mut view.color_resolver);
             for cell in links.values_mut() {
-                cell.fg = resolve_text_foreground(
+                if let Some(fg) = resolve_text_foreground(
                     cell.fg,
                     cell.bg,
                     cell.bold,
+                    cell.dim,
+                    cell.bg_dim,
                     theme,
                     overrides,
                     &mut view.color_resolver,
-                );
+                ) {
+                    cell.fg = fg;
+                    cell.dim = false;
+                }
             }
         });
     }
@@ -395,6 +403,9 @@ impl Element for TerminalElement {
                 view.math.bind_resources(cx);
                 let size_info =
                     super::math_overlay::grid_size_info(layout.cols, layout.rows, cell_w, line_h);
+                if view.reading.panel.is_some() {
+                    return view.math.clear_frame(&size_info, math_pixels_per_point);
+                }
                 // CLI identity must not disable grid math. The answer reader
                 // replaces TerminalElement in TerminalView::render only while
                 // actually open; merely detecting Codex/Claude is not a handoff.
@@ -527,7 +538,7 @@ impl Element for TerminalElement {
                 if start >= end {
                     return;
                 }
-                let color = theme.resolve(color, &overrides, false);
+                let color = theme.resolve_styled(color, &overrides, false, run.dim);
                 for visual in math_frame.projected_runs(
                     run.row as usize,
                     start as usize..end as usize,
@@ -595,6 +606,7 @@ impl Element for TerminalElement {
                 ));
             }
         }
+        self.paint_reading_highlight(bounds, layout, viewport_top_abs, window, cx);
         let selection_foreground = theme.selection_foreground;
         let selected_foreground = |row: u16, col: u16| -> Option<Rgba> {
             let foreground = selection_foreground?;
@@ -690,11 +702,13 @@ impl Element for TerminalElement {
             let fg = if app_cursor
                 .is_some_and(|cursor| cursor.row == glyph.row && cursor.col == glyph.col)
             {
-                app_cursor_color.unwrap_or_else(|| theme.resolve(glyph.fg, &overrides, glyph.bold))
+                app_cursor_color.unwrap_or_else(|| {
+                    theme.resolve_styled(glyph.fg, &overrides, glyph.bold, glyph.dim)
+                })
             } else if let Some(foreground) = selected_foreground(glyph.row, glyph.col) {
                 foreground
             } else {
-                theme.resolve(glyph.fg, &overrides, glyph.bold)
+                theme.resolve_styled(glyph.fg, &overrides, glyph.bold, glyph.dim)
             };
             let span = if glyph.wide { 2.0 } else { 1.0 };
             let Some(prims) = boxdraw::primitives(
@@ -753,7 +767,7 @@ impl Element for TerminalElement {
                 } else if emphasized {
                     rgba_rgb(codex_palette.color(summary.unwrap().kind), 1.0).into()
                 } else {
-                    theme.resolve(cell.fg, &overrides, cell.bold).into()
+                    theme.resolve_styled(cell.fg, &overrides, cell.bold, cell.dim).into()
                 };
                 let dashed_link = dashed.contains_key(&(seg.row, cell.col));
                 let underline = (cell.underline && !dashed_link).then(|| UnderlineStyle {
@@ -823,11 +837,12 @@ impl Element for TerminalElement {
                     }
                     cells = &remaining[count..];
                 } else {
-                    let shaped = window.text_system().shape_line(
-                        SharedString::from(cell.text.clone()),
+                    let shaped = cell_fit::shape_cell(
+                        window.text_system(),
+                        &cell.text,
                         font_size,
-                        &[run.clone()],
-                        None,
+                        &run,
+                        layout.cell_width,
                     );
                     let _ = shaped.paint(
                         origin,
@@ -865,7 +880,7 @@ impl Element for TerminalElement {
             let color = if let Some(foreground) = selected_foreground(row, col) {
                 foreground
             } else {
-                theme.resolve(cell.fg, &overrides, cell.bold)
+                theme.resolve_styled(cell.fg, &overrides, cell.bold, cell.dim)
             };
             super::link_underline::paint(
                 window,
@@ -1074,12 +1089,12 @@ impl Element for TerminalElement {
             }
         }
 
-        // Overlay 滚动条：贴着底部时拇指为 None 不画，滚进历史才浮在网格右缘。
+        // Overlay 滚动条：可见性由用户策略和拖拽状态共同决定。
         // 几何来自 view 的单一真值源——命中测试拿的是同一个矩形（旧壳
         // `draw_scrollbar` / `scrollbar_grab` 共用 `scrollbar_geometry` 同构）。
         let (dragging, thumb) = {
             let view = self.view.read(cx);
-            (view.scrollbar_dragging(), view.scrollbar_thumb(snap.display_offset, history))
+            (view.scrollbar_highlighted(), view.scrollbar_thumb(snap.display_offset, history))
         };
         if let Some(thumb) = thumb {
             let color = if dragging {

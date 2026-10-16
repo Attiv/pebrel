@@ -34,6 +34,7 @@ mod keyboard;
 #[cfg(test)]
 mod keyboard_contract_tests;
 mod prompt;
+pub mod reading;
 mod redraw_anchor;
 mod renderable;
 pub mod search;
@@ -230,8 +231,11 @@ pub struct Term<T> {
     /// Information about damaged cells.
     damage: TermDamageState,
 
-    /// Shell prompt geometry and its negotiated input-mode baseline.
+    /// Shell-owned input-mode baseline and command lease; prompt geometry
+    /// lives in `reading`.
     prompt: prompt::PromptState,
+    /// Shell markers and bounded reading share the grid lifecycle.
+    reading: reading::ReadingState,
 
     /// One-shot suppression of the next primary-DA answer: the side-loaded
     /// ConPTY host's bring-up DA1 query was already answered by the response
@@ -398,6 +402,7 @@ impl<T> Term<T> {
             inactive_keyboard_mode_stack: Default::default(),
             keyboard_mode_stack: Default::default(),
             prompt: Default::default(),
+            reading: Default::default(),
             active_charset: Default::default(),
             vi_mode_cursor: Default::default(),
             cursor_style: Default::default(),
@@ -728,6 +733,7 @@ impl<T> Term<T> {
     /// Mutable access to the raw grid data structure.
     pub fn grid_mut(&mut self) -> &mut Grid<Cell> {
         self.reset_input_cluster();
+        self.reading.invalidate();
         &mut self.grid
     }
 
@@ -774,7 +780,9 @@ impl<T> Term<T> {
 
         // Reflow rewraps history rows, so absolute prompt-mark lines no longer
         // match; drop them rather than jump to shifted positions.
-        self.prompt.clear_geometry();
+        self.reading.invalidate();
+        self.reading.prompt_marks.clear();
+        self.reading.prompt_input = None;
 
         // Invalidate selection and tabs only when necessary.
         if old_cols != num_cols {
@@ -812,6 +820,7 @@ impl<T> Term<T> {
     /// Swap primary and alternate screen buffer.
     pub fn swap_alt(&mut self) {
         self.reset_input_cluster();
+        self.reading.invalidate();
         self.cancel_redraw_anchor();
         if !self.mode.contains(TermMode::ALT_SCREEN) {
             // Set alt screen cursor to the current primary screen cursor.
@@ -1894,6 +1903,10 @@ impl<T: EventListener> Handler for Term<T> {
         self.grid.reset();
         self.inactive_grid.reset();
         self.prompt.reset();
+        self.reading.invalidate();
+        self.reading.prompt_marks.clear();
+        self.reading.prompt_input = None;
+        self.reading.prompt_active = false;
         self.scroll_region = Line(0)..Line(self.screen_lines() as i32);
         self.tabs = TabStops::new(self.columns());
         self.title_stack = Vec::new();

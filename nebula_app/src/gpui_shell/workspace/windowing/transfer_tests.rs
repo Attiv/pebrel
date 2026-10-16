@@ -24,7 +24,7 @@ impl Drop for SessionBytesGuard {
     }
 }
 
-struct WindowSessionFixture {
+pub(super) struct WindowSessionFixture {
     // Restore the snapshot before releasing the shared storage lock.
     _session: SessionBytesGuard,
     cx: TestAppContext,
@@ -41,7 +41,7 @@ impl Drop for WindowSessionFixture {
     }
 }
 
-fn initialize_test(cx: &mut TestAppContext) -> WindowSessionFixture {
+pub(super) fn initialize_test(cx: &mut TestAppContext) -> WindowSessionFixture {
     let serialization = crate::gpui_shell::settings_fixture::lock_theme_studio();
     let fixture = WindowSessionFixture {
         _session: SessionBytesGuard::capture(),
@@ -62,7 +62,7 @@ fn initialize_test(cx: &mut TestAppContext) -> WindowSessionFixture {
     fixture
 }
 
-fn open_test_window(cx: &mut App, count: usize) -> (u64, Entity<NebulaWorkspace>) {
+pub(super) fn open_test_window(cx: &mut App, count: usize) -> (u64, Entity<NebulaWorkspace>) {
     let (id, workspace) =
         open_workspace_window(cx, WorkspaceStartup::Empty, None, None, false, WindowRole::Regular)
             .unwrap();

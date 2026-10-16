@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::i18n::Message;
-use crate::saved_commands::{is_system_group, system_groups};
+use crate::saved_commands::{BUILTIN_GROUP_ID, is_system_group, system_groups};
 use gpui::{Anchor, AnyElement, DismissEvent, Point, anchored, deferred};
 use gpui_component::menu::PopupMenuItem;
 
@@ -87,7 +87,9 @@ impl NebulaWorkspace {
                         self.saved_commands.group_for(&command.id) == Some(id.as_str())
                     })
                     .count();
-                rows.push(ManagerRow::Folder { id, name, count });
+                if id != BUILTIN_GROUP_ID || count > 0 {
+                    rows.push(ManagerRow::Folder { id, name, count });
+                }
             }
         }
         rows
@@ -105,8 +107,9 @@ impl NebulaWorkspace {
             return;
         }
         self.command_manager_group = id;
+        self.command_manager_selection.ids.clear();
         self.command_group_menu = None;
-        self.command_manager_selected = 0;
+        self.command_manager_selection.cursor = 0;
         self.command_manager_scroll.scroll_to_item_strict(0, gpui::ScrollStrategy::Top);
         self.command_manager_input.update(cx, |input, cx| {
             input.set_value("", window, cx);
@@ -180,7 +183,7 @@ impl NebulaWorkspace {
         let language = crate::gpui_shell::config::ui_language(cx);
         match result {
             Ok(()) => {
-                self.command_manager_selected = 0;
+                self.command_manager_selection.cursor = 0;
                 self.command_manager_scroll.scroll_to_item_strict(0, gpui::ScrollStrategy::Top);
                 cx.notify();
                 true
@@ -219,8 +222,10 @@ impl NebulaWorkspace {
         let hover = cx.theme().list_hover;
         let active = cx.theme().list_active;
         let muted = cx.theme().muted_foreground;
-        let selected = index == self.command_manager_selected;
-        let delete_id = (!is_system_group(&id)).then(|| id.clone());
+        let selected = index == self.command_manager_selection.cursor;
+        // The shared builtin folder exposes the clear-builtins action; virtual
+        // platform catalogues and unknown system groups never offer deletion.
+        let delete_id = (!is_system_group(&id) || id == BUILTIN_GROUP_ID).then(|| id.clone());
         let click_id = id.clone();
         let language = crate::gpui_shell::config::ui_language(cx);
         h_flex()
@@ -286,15 +291,27 @@ impl NebulaWorkspace {
             .when_some(delete_id, |row, id| {
                 row.child(
                     Button::new(SharedString::from(format!("delete-command-group-{id}")))
-                        .debug_selector(move || format!("delete-command-group-{index}"))
+                        .size(px(32.0))
                         .icon(IconName::Close)
                         .ghost()
                         .xsmall()
-                        .tooltip(language.text(Message::CommandsDeleteGroup))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("delete-command-group-{id}")
+                        })
+                        .tooltip(language.text(if id == BUILTIN_GROUP_ID {
+                            Message::CommandsClearBuiltins
+                        } else {
+                            Message::CommandsDeleteGroup
+                        }))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
-                            let result = this.saved_commands.remove_group(&id);
-                            this.finish_group_change(result, window, cx);
+                            let deletion = if id == BUILTIN_GROUP_ID {
+                                Deletion::Builtins
+                            } else {
+                                Deletion::Folder(id.clone())
+                            };
+                            this.open_command_deletion(deletion, window, cx);
                         })),
                 )
             })

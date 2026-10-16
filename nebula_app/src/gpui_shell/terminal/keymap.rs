@@ -429,7 +429,7 @@ pub(super) fn is_mac_line_delete(ks: &Keystroke) -> bool {
 
 fn mac_line_edit_key(ks: &Keystroke) -> Option<char> {
     let mods = &ks.modifiers;
-    if !cfg!(target_os = "macos")
+    if crate::platform::Platform::current() != crate::platform::Platform::MacOS
         || !mods.platform
         || mods.control
         || mods.alt

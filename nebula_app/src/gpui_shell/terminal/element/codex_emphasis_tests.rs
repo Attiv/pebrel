@@ -93,7 +93,13 @@ fn marker_does_not_paint_over_program_background_or_selection() {
     let mut snapshot = capture("• Failed (exit 1) test".as_bytes());
     let row = classify_codex_summary_rows(&snapshot, true)[0].unwrap();
     assert!(should_paint_codex_marker(row, &snapshot));
-    snapshot.bg_runs.push(BgRun { row: 0, start: 0, end: 1, color: Color::Named(NamedColor::Red) });
+    snapshot.bg_runs.push(BgRun {
+        row: 0,
+        start: 0,
+        end: 1,
+        color: Color::Named(NamedColor::Red),
+        dim: false,
+    });
     assert!(!should_paint_codex_marker(row, &snapshot));
     snapshot.bg_runs.clear();
     snapshot.selection_runs.push(CellRun { row: 0, start: 2, end: 8 });

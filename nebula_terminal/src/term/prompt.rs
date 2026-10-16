@@ -1,6 +1,4 @@
 //! Semantic prompt marks and input boundaries owned by the terminal grid.
-use std::collections::VecDeque;
-
 use super::{Term, TermMode};
 use crate::event::EventListener;
 use crate::grid::{Dimensions, Scroll};
@@ -8,12 +6,10 @@ use crate::index::{Column, Line, Point};
 use crate::vte::ansi::KeyboardModes;
 
 /// Shell-owned state is distinct from transient application negotiation.
+/// Prompt geometry lives in [`super::reading::ReadingState`]; this struct keeps
+/// only the negotiated input-mode baseline and its ownership lease.
 #[derive(Default)]
 pub(super) struct PromptState {
-    /// Strictly increasing absolute primary-screen prompt rows.
-    marks: VecDeque<usize>,
-    active: bool,
-    input: Option<(usize, Column)>,
     baseline: Option<InputModeSnapshot>,
     command_running: bool,
     generation: u64,
@@ -22,11 +18,6 @@ pub(super) struct PromptState {
 }
 
 impl PromptState {
-    pub(super) fn clear_geometry(&mut self) {
-        self.marks.clear();
-        self.input = None;
-    }
-
     pub(super) fn reset(&mut self) {
         *self = Self {
             generation: self.generation.wrapping_add(1),
@@ -180,7 +171,7 @@ impl<T> Term<T> {
         }
         // A new prompt is the fallback boundary when no command-done marker
         // was emitted. Do not reset a shell's own active prompt redraw.
-        if !self.prompt.active {
+        if !self.reading.prompt_active {
             self.restore_prompt_input_modes();
         }
         self.capture_prompt_input_modes();
@@ -188,27 +179,27 @@ impl<T> Term<T> {
 
         // A screen redraw (clear, resize) can re-emit a mark for the same or
         // an earlier row; drop those so the deque stays strictly increasing.
-        while self.prompt.marks.back().is_some_and(|&m| m >= abs) {
-            self.prompt.marks.pop_back();
+        while self.reading.prompt_marks.back().is_some_and(|&m| m >= abs) {
+            self.reading.prompt_marks.pop_back();
         }
         // Prune marks whose rows have scrolled out of history entirely.
         let floor = self.grid.scrolled_out();
-        while self.prompt.marks.front().is_some_and(|&m| m < floor) {
-            self.prompt.marks.pop_front();
+        while self.reading.prompt_marks.front().is_some_and(|&m| m < floor) {
+            self.reading.prompt_marks.pop_front();
         }
 
-        self.prompt.marks.push_back(abs);
-        self.prompt.active = true;
-        self.prompt.input = None;
+        self.reading.prompt_marks.push_back(abs);
+        self.reading.prompt_active = true;
+        self.reading.prompt_input = None;
     }
 
     pub fn nebula_end_prompt(&mut self) {
-        self.prompt.active = false;
-        self.prompt.input = None;
+        self.reading.prompt_active = false;
+        self.reading.prompt_input = None;
     }
 
     pub fn nebula_prompt_active(&self) -> bool {
-        self.prompt.active && !self.mode.contains(TermMode::ALT_SCREEN)
+        self.reading.prompt_active && !self.mode.contains(TermMode::ALT_SCREEN)
     }
 
     /// Capture OSC 133;B between parser slices, before input is echoed.
@@ -220,7 +211,7 @@ impl<T> Term<T> {
                 line += 1;
                 column = Column(0);
             }
-            self.prompt.input = Some((line, column));
+            self.reading.prompt_input = Some((line, column));
         }
     }
 
@@ -230,7 +221,7 @@ impl<T> Term<T> {
         if !self.nebula_prompt_active() {
             return None;
         }
-        let (line, column) = self.prompt.input?;
+        let (line, column) = self.reading.prompt_input?;
         if line < self.grid.scrolled_out() || column.0 >= self.columns() {
             return None;
         }
@@ -257,7 +248,7 @@ impl<T> Term<T> {
     where
         T: EventListener,
     {
-        if self.mode.contains(TermMode::ALT_SCREEN) || self.prompt.marks.is_empty() {
+        if self.mode.contains(TermMode::ALT_SCREEN) || self.reading.prompt_marks.is_empty() {
             return false;
         }
 
@@ -267,9 +258,9 @@ impl<T> Term<T> {
         let top_abs = scrolled_out + history - self.grid.display_offset();
 
         let target = if up {
-            self.prompt.marks.iter().rev().find(|&&m| m < top_abs)
+            self.reading.prompt_marks.iter().rev().find(|&&m| m < top_abs)
         } else {
-            self.prompt.marks.iter().find(|&&m| m > top_abs)
+            self.reading.prompt_marks.iter().find(|&&m| m > top_abs)
         };
         let Some(&mark) = target else { return false };
 

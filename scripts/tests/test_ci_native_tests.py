@@ -182,7 +182,27 @@ class NativeSuiteTests(unittest.TestCase):
         self.assertEqual(config["test-groups"], {"theme-studio": {"max-threads": 1}})
         self.assertEqual(config["profile"]["default"], {
             "overrides": [{
-                "filter": 'test(gpui_shell::settings_pane::theme_studio_tests::) or test(ctrl_wheel_font_zoom_toggle_gates_zoom_and_terminal_scroll) or test(ctrl_wheel_font_zoom_setting_is_searchable_and_has_a_visible_switch) or test(environment_refresh_switch_is_searchable_and_persists) or test(pasted_proxy_scheme_updates_the_visible_protocol_and_saved_url) or test(capsule_uses_inset_thumb_full_hit_targets_and_keyboard_selection) or test(completion_capsules_keep_all_chinese_choices_at_large_font_size) or test(font_size_click_input_commits_cancels_and_bounds_values) or test(cjk_dropdown_selection_preserves_the_english_font_chain) or test(review_regression_font_fields_align_and_dropdown_toggles_with_search) or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::hybrid_completion_uses_window_tab_dispatch_in_both_workspace_layouts) or test(gpui_shell::workspace::windowing::transfer_tests::) or test(=gpui_shell::settings_pane::tests::animation_effects_switch_is_visible_in_appearance_and_persists) or test(gpui_shell::settings_pane::tests::terminal_label_badges_) or test(gpui_shell::workspace::tab_undo_tests::) or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::command_z_reopens_closed_file_at_original_index_with_metadata) or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::clearing_custom_reopen_preserves_real_document_undo_and_redo) or test(=gpui_shell::workspace::terminal_activity::tests::ssh_forward_warning_is_rendered_for_its_origin_and_closed_panes_cannot_replay_it)',
+                "filter": "test(gpui_shell::settings_pane::theme_studio_tests::)"
+                          " or test(ctrl_wheel_font_zoom_toggle_gates_zoom_and_terminal_scroll)"
+                          " or test(ctrl_wheel_font_zoom_setting_is_searchable_and_has_a_visible_switch)"
+                          " or test(environment_refresh_switch_is_searchable_and_persists)"
+                          " or test(pasted_proxy_scheme_updates_the_visible_protocol_and_saved_url)"
+                          " or test(capsule_uses_inset_thumb_full_hit_targets_and_keyboard_selection)"
+                          " or test(completion_capsules_keep_all_chinese_choices_at_large_font_size)"
+                          " or test(font_size_click_input_commits_cancels_and_bounds_values)"
+                          " or test(cjk_dropdown_selection_preserves_the_english_font_chain)"
+                          " or test(review_regression_font_fields_align_and_dropdown_toggles_with_search)"
+                          " or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::hybrid_completion_uses_window_tab_dispatch_in_both_workspace_layouts)"
+                          " or test(=gpui_shell::workspace::windowing::elevated_launch::tests::elevated_launch_reuses_window_and_preserves_each_program_and_directory)"
+                          " or test(=gpui_shell::workspace::windowing::elevated_launch::tests::elevated_launch_new_window_policy_and_invalid_requests_preserve_existing_tabs)"
+                          " or test(=gpui_shell::settings_pane::tests::rename_keymap_row_is_searchable_and_enters_capture)"
+                          " or test(gpui_shell::workspace::windowing::transfer_tests::)"
+                          " or test(=gpui_shell::settings_pane::tests::animation_effects_switch_is_visible_in_appearance_and_persists)"
+                          " or test(gpui_shell::settings_pane::tests::terminal_label_badges_)"
+                          " or test(gpui_shell::workspace::tab_undo_tests::)"
+                          " or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::command_z_reopens_closed_file_at_original_index_with_metadata)"
+                          " or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::clearing_custom_reopen_preserves_real_document_undo_and_redo)"
+                          " or test(=gpui_shell::workspace::terminal_activity::tests::ssh_forward_warning_is_rendered_for_its_origin_and_closed_panes_cannot_replay_it)",
                 "test-group": "theme-studio",
             }, {
                 "filter": "test(=gpui_shell::terminal::view::startup_tests::"
@@ -197,7 +217,8 @@ class NativeSuiteTests(unittest.TestCase):
                 "filter": "test(=completion::tests::completion_requests_work_without_a_view_and_keep_repository_invalidation)"
                           " or test(=completion::tests::editor_cursor_requests_replace_only_the_active_token_and_keep_following_options)"
                           " or test(=completion::tests::checkout_completion_combines_branches_and_paths_and_scopes_remote_demand)"
-                          " or test(=completion::tests::explicit_tracking_requests_keep_edits_scoped_and_do_not_execute)",
+                          " or test(=completion::tests::explicit_tracking_requests_keep_edits_scoped_and_do_not_execute)"
+                          " or test(=completion::tests::network_completion_reads_configured_remotes_and_refspecs_without_network_access)",
                 "threads-required": "num-test-threads",
             }],
         })
@@ -215,6 +236,13 @@ class NativeSuiteTests(unittest.TestCase):
             "fn ssh_forward_warning_is_rendered_for_its_origin_and_closed_panes_cannot_replay_it(",
             activity,
         )
+        # 新夹具同样会写共享设置；只加入这两个真实函数，不放宽其它测试的调度。
+        elevated = (root / "nebula_app/src/gpui_shell/workspace/windowing/elevated_launch.rs").read_text(encoding="utf-8")
+        for name in (
+            "elevated_launch_reuses_window_and_preserves_each_program_and_directory",
+            "elevated_launch_new_window_policy_and_invalid_requests_preserve_existing_tabs",
+        ):
+            self.assertIn(f"fn {name}(", elevated)
 
     def test_native_caches_are_default_branch_snapshots_not_per_pr_uploads(self):
         root = Path(__file__).resolve().parents[2]

@@ -74,7 +74,7 @@ pub(super) fn regular_options(
         window_bounds: Some(window_bounds),
         window_min_size: Some(size(px(760.0), px(540.0)).min(&bounds.size)),
         titlebar: Some(TitleBar::title_bar_options()),
-        app_id: Some("pebrel".to_owned()),
+        app_id: Some(crate::platform::window_chrome::application_id("pebrel")),
         window_background: crate::gpui_shell::wallpaper::initial_background_appearance(),
         display_id: display.map(|display| display.id()),
         focus,

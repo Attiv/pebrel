@@ -3,7 +3,6 @@
 //! 远端 Pane 不创建本地伪终端，但继续使用统一的输入、缩放和关闭消息协议，
 //! 从而让渲染与键盘处理保持传输层无关。
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -30,16 +29,19 @@ pub(crate) mod completion;
 mod config;
 #[cfg(test)]
 use config::parse_remote_forward;
-use config::parse_resolved_config;
+pub(crate) use config::parse_resolved_config;
 mod exec;
 mod forward;
 mod integration;
 mod lifecycle;
+mod probe;
 mod route;
 mod transcript;
 pub use forward::{ForwardFailureReason, ForwardWarning};
 pub(crate) use forward::{LocalForward, PortForward, open_local_forward, open_remote_forward};
 pub(crate) use integration::setup_cli as setup_ai_cli;
+use probe::parse_host_port;
+pub(crate) use probe::{ssh_config_probe_args, ssh_config_probe_target};
 use route::{ResolvedRoute, RouteTransport};
 pub use transcript::TranscriptReader;
 
@@ -244,6 +246,11 @@ pub struct SshDestination {
 }
 
 impl SshDestination {
+    #[cfg(test)]
+    pub(crate) fn has_identity_files(&self) -> bool {
+        !self.identity_files.is_empty()
+    }
+
     pub fn parse(value: &str) -> io::Result<Self> {
         let original = value.trim().to_owned();
         let address = original.strip_prefix("ssh://").unwrap_or(&original).to_owned();
@@ -298,8 +305,7 @@ impl SshDestination {
         // `hostname host:port`。后续把它交给 socket 就会在 Windows 上得到
         // WSAHOST_NOT_FOUND。只规范化配置探测参数，保留 original 作为列表、
         // Profile 与凭据的稳定身份。
-        let config_target = ssh_config_probe_target(&original);
-        let output = ssh_config_output(config_target.as_ref());
+        let output = ssh_config_output(&original);
         if let Ok(output) = output {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
@@ -343,61 +349,6 @@ impl SshDestination {
     }
 }
 
-/// 给 `ssh -G` 的离线配置探测目标。Nebula 历史存盘格式允许
-/// `user@host:port`，而 OpenSSH 只会从 `ssh://user@host:port` URI 中拆出
-/// 端口；无显式端口、已有 URI 与裸 IPv6 都保持原样，避免改变 Host 匹配。
-pub(crate) fn ssh_config_probe_target(value: &str) -> Cow<'_, str> {
-    if value.starts_with("ssh://") {
-        return Cow::Borrowed(value);
-    }
-    let host_port = value.rsplit_once('@').map_or(value, |(_, host_port)| host_port);
-    let has_explicit_port = if let Some(rest) = host_port.strip_prefix('[') {
-        rest.split_once(']')
-            .and_then(|(_, suffix)| suffix.strip_prefix(':'))
-            .is_some_and(|port| port.parse::<u16>().is_ok())
-    } else if let Some((host, port)) = host_port.rsplit_once(':') {
-        !host.is_empty() && !host.contains(':') && port.parse::<u16>().is_ok()
-    } else {
-        false
-    };
-
-    if has_explicit_port { Cow::Owned(format!("ssh://{value}")) } else { Cow::Borrowed(value) }
-}
-
-fn parse_host_port(host_port: &str) -> io::Result<(String, u16)> {
-    let (host, port) = parse_host_port_optional(host_port)?;
-    Ok((host, port.unwrap_or(22)))
-}
-
-fn parse_host_port_optional(host_port: &str) -> io::Result<(String, Option<u16>)> {
-    let (host, port) = if let Some(rest) = host_port.strip_prefix('[') {
-        let (host, suffix) = rest
-            .split_once(']')
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "无效的 IPv6 SSH 地址"))?;
-        let port = suffix
-            .strip_prefix(':')
-            .map(str::parse)
-            .transpose()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "无效的 SSH 端口"))?;
-        (host.to_owned(), port)
-    } else if let Some((host, port)) = host_port.rsplit_once(':') {
-        if host.contains(':') {
-            (host_port.to_owned(), None)
-        } else {
-            let port = port
-                .parse()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "无效的 SSH 端口"))?;
-            (host.to_owned(), Some(port))
-        }
-    } else {
-        (host_port.to_owned(), None)
-    };
-    if host.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH 主机为空"));
-    }
-    Ok((host, port))
-}
-
 fn find_ssh() -> PathBuf {
     if let Some(root) = std::env::var_os("SystemRoot") {
         let path = PathBuf::from(root).join("System32").join("OpenSSH").join("ssh.exe");
@@ -426,7 +377,7 @@ fn ssh_config_command(target: &str, config: Option<&Path>) -> Command {
     if let Some(path) = config {
         command.arg("-F").arg(path);
     }
-    command.arg("-G").arg("--").arg(target);
+    command.arg("-G").args(ssh_config_probe_args(target));
     crate::platform::process::hidden_command(&mut command);
     command
 }

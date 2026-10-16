@@ -1,10 +1,8 @@
 //! Conservative fallback for simple ssh_config files when OpenSSH cannot expand them.
 //! OpenSSH remains authoritative for Include, Match, tokens and other advanced options.
 
-use super::{
-    RemoteForwardSpec, SshDestination, default_identity_files, expand_home,
-    parse_host_port_optional,
-};
+use super::probe::parse_host_port_optional;
+use super::{RemoteForwardSpec, SshDestination, default_identity_files, expand_home};
 use std::io;
 
 pub(super) fn resolve_from_ssh_config(original: &str) -> io::Result<Option<SshDestination>> {
@@ -177,7 +175,7 @@ fn glob_matches(pattern: &str, value: &str) -> bool {
     pattern_index == pattern.len()
 }
 
-pub(super) fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
+pub(crate) fn parse_resolved_config(original: &str, text: &str) -> Option<SshDestination> {
     let mut user = None;
     let mut host = None;
     let mut port = None;
