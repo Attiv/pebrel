@@ -145,7 +145,8 @@ impl NebulaWorkspace {
         let settings = cx.try_global::<crate::gpui_shell::config::Settings>();
         let tab_close_visible = settings.map(|settings| settings.tab_close_visible).unwrap_or(true);
         let instant_motion = super::tab_reveal_instant(cx) || window.last_input_was_keyboard();
-        let chrome_family = theme.mono_font_family.clone();
+        let chrome_family = theme.font_family.clone();
+        let metadata_family = theme.mono_font_family.clone();
         let symbol_family: SharedString = crate::font_install::REQUIRED_FONT_FAMILY.into();
         let label_px = settings.map(|settings| settings.ui_font_size_px).unwrap_or(15.0);
         let port_forward_w = if port_forward_button.is_some() { 32.0 } else { 0.0 };
@@ -199,7 +200,7 @@ impl NebulaWorkspace {
                 let status_width = Self::shell_status_width(
                     window,
                     shell_tag.as_ref(),
-                    &chrome_family,
+                    &metadata_family,
                     label_px * 0.8,
                     TOP_TAB_STATUS_W,
                     tab_w * 0.4,
@@ -249,7 +250,7 @@ impl NebulaWorkspace {
                     SidebarActivity::Idle => shell_tag.map(|tag| {
                         Self::shell_status_label(
                             tag,
-                            chrome_family.clone(),
+                            metadata_family.clone(),
                             label_px * 0.8,
                             status_color,
                         )
@@ -454,7 +455,7 @@ impl NebulaWorkspace {
                             .truncate()
                             .font_family(chrome_family.clone())
                             .text_size(px(label_px))
-                            .font_weight(FontWeight::LIGHT)
+                            .font_weight(FontWeight::NORMAL)
                             .child(title)
                             .into_any_element(),
                     })
