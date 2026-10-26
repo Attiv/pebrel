@@ -1339,7 +1339,7 @@ impl TerminalView {
         if !self.focus_handle.is_focused(window) {
             return;
         }
-        if !self.accepts_input() || self.answer_reader.is_some() {
+        if self.exited.is_some() || self.answer_reader.is_some() {
             return;
         }
         self.prepare_terminal_input(cx);
@@ -1609,10 +1609,7 @@ impl gpui::EntityInputHandler for TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.accepts_input()
-            || self.answer_reader.is_some()
-            || !self.focus_handle.is_focused(window)
-        {
+        if self.answer_reader.is_some() || !self.focus_handle.is_focused(window) {
             return;
         }
         let marked_text = if new_text.is_empty() { None } else { Some(new_text.to_string()) };

@@ -69,7 +69,7 @@ mod tests {
     use super::super::transfer_tests::{initialize_test, open_test_window};
     use super::*;
     use crate::config::ui_config::Program;
-    use crate::gpui_shell::settings_fixture::{SettingsBytesGuard, lock_theme_studio};
+    use crate::gpui_shell::settings_fixture::SettingsBytesGuard;
 
     fn configure(behavior: &str) {
         let path = nebula_settings::settings_path();
@@ -100,10 +100,9 @@ mod tests {
     fn update_recovery_tracks_its_windows_and_retries_only_missing_slots(
         cx: &mut gpui::TestAppContext,
     ) {
-        let _lock = lock_theme_studio();
+        let _fixture = initialize_test(cx);
         let _settings = SettingsBytesGuard::capture();
         configure("use_any_existing");
-        initialize_test(cx);
         cx.update(|cx| {
             let (existing, _) = open_test_window(cx, 0);
             let (restored, _) = open_test_window(cx, 0);

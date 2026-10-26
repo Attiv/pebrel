@@ -36,9 +36,13 @@ impl Drop for WindowSessionFixture {
     fn drop(&mut self) {
         // The GPUI test macro quits after local guards drop. Finish its session
         // writes now, while the original bytes and serialization are still held.
+        //
+        // `quit` runs the app-quit observers synchronously, so the final session
+        // write has already landed when it returns. Pumping the scheduler again
+        // afterwards would wake detached workspace watchdogs against a torn-down
+        // app (no windows, missing globals) and abort the whole test binary.
         self.cx.run_until_parked();
         self.cx.quit();
-        self.cx.run_until_parked();
     }
 }
 
@@ -55,6 +59,12 @@ pub(super) fn initialize_test(cx: &mut TestAppContext) -> WindowSessionFixture {
         crate::gpui_shell::file_editor::init(cx);
         super::super::init(cx);
         initialize(cx, crate::runtime_api::RuntimeHub::new());
+        // Settings owns UI typography and is required as soon as a window opens
+        // the settings surface; the real app installs it during bootstrap.
+        cx.set_global(crate::gpui_shell::config::Settings::load(nebula_settings::ThemeName::Nord));
+        // Startup geometry is held separately from Settings and only applied
+        // when the global exists, exactly as in the real bootstrap sequence.
+        cx.set_global(crate::gpui_shell::config::StartupWindow::default());
         // Hosted Windows runners may be elevated. These fixtures represent an
         // ordinary window; privileged storage isolation is tested separately.
         cx.global_mut::<WindowRegistry>().session_persistence =
@@ -111,11 +121,18 @@ fn runtime_close_captures_actual_bounds_before_the_bounds_observer_runs(cx: &mut
     cx.update(|cx| {
         let (id, workspace) = open_test_window(cx, 1);
         let entry = entry_by_id(id, cx).unwrap();
-        let expected = entry
+        let expected_position = entry
             .handle
             .update(cx, |_, window, cx| {
                 window.resize(size(px(1190.0), px(800.0)));
                 let actual = window.window_bounds().get_bounds();
+                // Upstream geometry stores the platform-normal physical origin;
+                // the legacy logical `x`/`y` fields are read-only compatibility.
+                let position = crate::platform::startup::normal_position(
+                    actual.origin,
+                    window.scale_factor(),
+                    window.display(cx).map(|display| u64::from(display.id())),
+                );
                 workspace.update(cx, |workspace, cx| {
                     workspace
                         .execute_runtime_command(
@@ -125,14 +142,14 @@ fn runtime_close_captures_actual_bounds_before_the_bounds_observer_runs(cx: &mut
                         )
                         .unwrap();
                 });
-                actual
+                position
             })
             .unwrap();
         let saved = cx.global::<WindowRegistry>().session_persistence.update_windows().unwrap();
         let state = saved[0].window.expect("closing captures native geometry");
         assert_eq!((state.width, state.height), (1190, 800));
-        assert_eq!(state.x, Some(f32::from(expected.origin.x).round() as i32));
-        assert_eq!(state.y, Some(f32::from(expected.origin.y).round() as i32));
+        assert_eq!(state.position, expected_position);
+        assert_eq!((state.x, state.y), (None, None));
     });
 }
 
@@ -228,8 +245,15 @@ fn startup_restores_geometry_when_terminal_session_restore_is_disabled(cx: &mut 
             WindowRole::Regular,
         )
         .unwrap();
-        let saved = workspace.read(cx).snapshot_session(cx);
-        assert_eq!(saved.window, previous.window);
+        // `snapshot_session` owns tabs only; the durable window geometry comes
+        // from the native window through the combined session snapshot.
+        let saved = combined_session(None, cx).expect("startup window stays live");
+        let saved_window = saved.window.expect("startup restores the saved size");
+        assert_eq!((saved_window.width, saved_window.height), (1190, 800));
+        assert!(!saved_window.maximized);
+        // The legacy logical coordinates in v4 snapshots are readable but are
+        // never rewritten; native origin lives in `position`/`display` now.
+        assert_eq!((saved_window.x, saved_window.y), (None, None));
         assert_eq!(saved.tabs.len(), 1, "startup still creates one fresh terminal");
         assert_ne!(saved.tabs[0].custom_name, previous.tabs[0].custom_name);
         workspace.update(cx, |workspace, cx| workspace.shutdown_terminal_panes(cx));
@@ -295,7 +319,7 @@ fn moving_one_of_two_tabs_preserves_source_and_identity(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn ordinary_window_geometry_is_in_the_durable_snapshot(cx: &mut TestAppContext) {
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     cx.update(|cx| {
         let (id, _) = open_test_window(cx, 1);
         let entry = entry_by_id(id, cx).unwrap();
@@ -316,7 +340,7 @@ fn ordinary_window_geometry_is_in_the_durable_snapshot(cx: &mut TestAppContext) 
 
 #[gpui::test]
 fn ordinary_window_geometry_survives_closing_the_last_empty_window(cx: &mut TestAppContext) {
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     cx.update(|cx| {
         cx.global_mut::<WindowRegistry>().session_persistence =
             SessionPersistence::ordinary_for_test();
@@ -345,7 +369,7 @@ fn alt_release_tears_out_tab_from_within_the_window(cx: &mut TestAppContext) {
     // 松手位置也能把标签撕成独立新窗口——这正是 issue #572 的核心缺陷。
     // 本用例复刻真实侧栏手势：mouse-down 冻结真实跨窗 payload，带 Alt 的
     // move 激活；松手时 Alt 已松开，仅靠拖拽期间锁存的撕出意图完成撕出。
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     let (source_id, source, moved_view) = cx.update(|cx| {
         let (id, source) = open_test_window(cx, 2);
         let moved_view = source.read(cx).tabs[1].focused_view().unwrap().clone();
@@ -413,7 +437,7 @@ fn nc_move_without_pressed_button_keeps_active_alt_drag_alive(cx: &mut TestAppCo
     // 真机 #572：拖拽掠过窗口非客户区（边框/标题栏条带）时，gpui_windows 把
     // WM_NCMOUSEMOVE 合成为 pressed_button=None 的 MouseMoveEvent。已激活的
     // 拖拽必须无视它继续存活，否则锁存的撕出意图在松手前就被静默清掉。
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     let (source_id, source, moved_view) = cx.update(|cx| {
         let (id, source) = open_test_window(cx, 2);
         let moved_view = source.read(cx).tabs[1].focused_view().unwrap().clone();
@@ -490,7 +514,7 @@ fn nc_move_without_pressed_button_keeps_active_alt_drag_alive(cx: &mut TestAppCo
 fn nc_move_still_clears_pending_drag_without_committing(cx: &mut TestAppContext) {
     // 未激活的待命拖拽遇到非客户区移动仍然清理（防止 up 丢失后残留待命状态），
     // 且不得提交任何重排、不得开新窗口。
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     let (source_id, source) = cx.update(|cx| {
         let (id, source) = open_test_window(cx, 2);
         let entry = entry_by_id(id, cx).unwrap();
@@ -539,7 +563,7 @@ fn alt_drag_survives_nc_move_and_tears_out_via_real_events(cx: &mut TestAppConte
     // 整链路复刻（真实派发，含 GPUI 原生 on_drag 机制）：按住 Alt 从侧栏标签行
     // 拖出，中途插入一个 WM_NCMOUSEMOVE 形状的 None move；修复前该事件会在
     // 激活后静默清掉手势，松手不产生新窗口，这正是 #572 真机 trace 的形状。
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     let (source_id, source) = cx.update(|cx| open_test_window(cx, 2));
     let handle = cx.update(|cx| entry_by_id(source_id, cx).unwrap().handle);
     let moved_view = cx.update(|cx| source.read(cx).tabs[1].focused_view().unwrap().clone());
@@ -592,7 +616,7 @@ fn release_outside_source_window_tears_out_without_alt(cx: &mut TestAppContext) 
     // 无任何 release 行」即此形状。修复后由 paint 期注册的窗口级裸监听兜底，
     // 走 release_tab_drag_at 的 outside 分支撕出新窗口（原「拖出窗口外」语义）。
     // 全程不用 Alt，证明这条不是靠锁存意图走通的。
-    initialize_test(cx);
+    let _fixture = initialize_test(cx);
     let (source_id, source) = cx.update(|cx| open_test_window(cx, 2));
     let handle = cx.update(|cx| entry_by_id(source_id, cx).unwrap().handle);
     let moved_view = cx.update(|cx| source.read(cx).tabs[1].focused_view().unwrap().clone());

@@ -28,10 +28,12 @@ impl NebulaWorkspace {
                 meta.has_bell = false;
             }
             self.reveal_active_tab();
-            self.focus_active(window, cx);
             self.sync_side_panel_to_active(true, cx);
             cx.notify();
         }
+        // 标签栏是根焦点区域的非焦点子节点：点击当前标签同样要把焦点
+        // 从工作区根/侧栏送回内容，否则键入会停在没有焦点的根上。
+        self.focus_active(window, cx);
     }
 
     pub(super) fn select_tab(

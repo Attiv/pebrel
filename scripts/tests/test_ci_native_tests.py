@@ -206,7 +206,6 @@ class NativeSuiteTests(unittest.TestCase):
                           " or test(=gpui_shell::workspace::keyboard_bindings::tests::dispatch::clearing_custom_reopen_preserves_real_document_undo_and_redo)"
                           " or test(=gpui_shell::workspace::terminal_activity::tests::ssh_forward_warning_is_rendered_for_its_origin_and_closed_panes_cannot_replay_it)"
                           " or test(=gpui_shell::workspace::windowing::elevated_launch::tests::update_recovery_tracks_its_windows_and_retries_only_missing_slots)"
-                          " or test(=gpui_shell::settings_pane::tests::rename_keymap_row_is_searchable_and_enters_capture)"
                           " or test(=gpui_shell::settings_pane::providers::interaction_tests::api_key_and_json_edits_stay_in_sync_without_recursive_updates)",
                 "test-group": "theme-studio",
             }, {

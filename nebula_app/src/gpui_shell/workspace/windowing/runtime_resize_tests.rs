@@ -5,7 +5,7 @@ use nebula_terminal::event_loop::Msg;
 
 #[gpui::test]
 fn resize_reply_commits_both_pty_sizes_before_the_next_input(cx: &mut TestAppContext) {
-    transfer_tests::initialize_test(cx);
+    let _fixture = transfer_tests::initialize_test(cx);
     cx.update(|cx| {
         let (id, workspace) = transfer_tests::open_test_window(cx, 0);
         let entry = entry_by_id(id, cx).unwrap();
