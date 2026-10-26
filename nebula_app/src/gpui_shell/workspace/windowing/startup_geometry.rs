@@ -4,7 +4,7 @@
 //! platform exposes display DPI, supply the final size before the window is
 //! shown; otherwise keep the existing post-creation sizing fallback.
 
-use super::{WindowRole, WorkspaceStartup};
+use super::{WindowRegistry, WindowRole, WorkspaceStartup};
 use crate::gpui_shell::config::StartupWindow;
 use gpui::{
     App, Bounds, Pixels, Point, Size, Window, WindowBounds, WindowOptions, point, px, size,
@@ -92,7 +92,12 @@ pub(super) fn load_restore(id: u64, startup: &WorkspaceStartup, role: WindowRole
     if id != 1
         || role != WindowRole::Regular
         || !matches!(startup, WorkspaceStartup::RestoreOrDefault)
-        || crate::platform::elevation::requires_isolation()
+        // Session persistence owns the ordinary/isolated decision. Reading the
+        // same flag keeps startup restore aligned with durable writes and lets
+        // fixtures that model an ordinary window run on elevated hosted hosts.
+        || cx
+            .try_global::<WindowRegistry>()
+            .is_none_or(|registry| registry.session_persistence.is_isolated())
     {
         return;
     }

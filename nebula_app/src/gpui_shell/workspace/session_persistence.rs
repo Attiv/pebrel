@@ -33,6 +33,13 @@ impl SessionPersistence {
         Self { isolated: false, ..Self::default() }
     }
 
+    /// Startup restore and durable saves must agree on whether this instance
+    /// owns the ordinary user session. Keep the host elevation query in the
+    /// default constructor so tests that model an ordinary window can opt in.
+    pub(super) fn is_isolated(&self) -> bool {
+        self.isolated
+    }
+
     pub(super) fn update_windows(&self) -> std::io::Result<Vec<Session>> {
         // 管理员只在显式更新事务中落盘；commit 会在授权安装前持久保存这份内存快照。
         (if self.isolated { &self.latest } else { &self.saved })
