@@ -6,7 +6,7 @@
 //! 看得出对称性。
 //!
 //! - **发送方向**（`write_user_*`）：先按本 pane 的模式编码并写 PTY，再 emit
-//!   一条语义事件。emit 是无条件的，广播开关的判定在宿主
+//!   一条语义事件。断开的 SSH pane 不发送输入事件；广播开关的判定在宿主
 //!   （`workspace::pane_header::fan_out_broadcast`），视图这边不留第二份记账。
 //! - **接收方向**（`apply_broadcast_*`）：按**自己**的 term mode 重新编码后
 //!   直接写 PTY，**不再 emit**——这就是无环的全部保证。
@@ -90,7 +90,9 @@ impl TerminalView {
         }
         self.prepare_terminal_input(cx);
         if paste {
-            self.paste_now_impl(text, false, cx);
+            if !self.try_native_clipboard_paste(text, false, cx) {
+                self.paste_now_impl(text, false, cx);
+            }
         } else {
             if self.shell_input_screen() {
                 crate::display::nebula_input_text(&mut self.suggest, text);

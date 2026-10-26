@@ -4,6 +4,7 @@
 //! 弹窗覆盖在终端之上而不参与主布局，避免为了短时管理命令永久压缩 PTY。
 
 use super::*;
+use crate::i18n::Message;
 mod bulk;
 mod clipboard;
 pub(super) use bulk::CommandSelection;
@@ -162,11 +163,12 @@ impl NebulaWorkspace {
         cx: &mut Context<'_, Self>,
     ) {
         if let Err(error) = self.saved_commands.reload() {
+            let language = crate::gpui_shell::config::ui_language(cx);
             crate::gpui_shell::toast::toast(
                 window,
                 cx,
                 crate::display::ToastKind::Warning,
-                format!("无法读取已保存命令：{error}"),
+                language.format(Message::CommandsReadFailed, &[("error", &error.to_string())]),
             );
         }
         self.command_manager_group = None;
@@ -236,13 +238,14 @@ impl NebulaWorkspace {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        let language = crate::gpui_shell::config::ui_language(cx);
         let view = self.tabs.get(self.active).and_then(WorkspaceTab::focused_view).cloned();
         let Some(view) = view else {
             crate::gpui_shell::toast::toast(
                 window,
                 cx,
                 crate::display::ToastKind::Warning,
-                "当前标签不是可用的终端",
+                language.text(Message::CommandsNoTerminal),
             );
             return;
         };
@@ -259,7 +262,7 @@ impl NebulaWorkspace {
                 window,
                 cx,
                 crate::display::ToastKind::Warning,
-                format!("无法发送命令：{}", error.message),
+                language.format(Message::CommandsSendFailed, &[("error", &error.message)]),
             ),
         }
     }
@@ -271,7 +274,13 @@ impl NebulaWorkspace {
         cx: &mut Context<'_, Self>,
     ) {
         cx.write_to_clipboard(ClipboardItem::new_string(command.command.clone()));
-        crate::gpui_shell::toast::toast(window, cx, crate::display::ToastKind::Info, "命令已复制");
+        let language = crate::gpui_shell::config::ui_language(cx);
+        crate::gpui_shell::toast::toast(
+            window,
+            cx,
+            crate::display::ToastKind::Info,
+            language.text(Message::CommandsCopied),
+        );
     }
 
     fn open_saved_command_editor(
@@ -280,6 +289,7 @@ impl NebulaWorkspace {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        let language = crate::gpui_shell::config::ui_language(cx);
         let current = edit_id.as_deref().and_then(|id| {
             self.available_saved_commands(cx).into_iter().find(|command| command.id == id)
         });
@@ -288,13 +298,12 @@ impl NebulaWorkspace {
                 window,
                 cx,
                 crate::display::ToastKind::Warning,
-                "这条命令已不存在",
+                language.text(Message::CommandsMissing),
             );
             return;
         }
 
         let edit_id = edit_id.filter(|id| !id.starts_with("builtin:"));
-        let language = crate::gpui_shell::config::ui_language(cx);
         let initial_name = current.as_ref().map(|command| command.name.clone()).unwrap_or_default();
         let initial_command =
             current.as_ref().map(|command| command.command.clone()).unwrap_or_default();
@@ -482,6 +491,13 @@ impl NebulaWorkspace {
     ) -> gpui::AnyElement {
         use crate::display::ui::tokens::{control, radius};
 
+        let language = crate::gpui_shell::config::ui_language(cx);
+        if self.command_manager_language != language {
+            self.command_manager_input.update(cx, |input, cx| {
+                input.set_placeholder(language.text(Message::CommandsSearch), window, cx);
+            });
+            self.command_manager_language = language;
+        }
         let theme = cx.theme();
         let panel_bg = theme.popover;
         let surface_bg = theme.muted;
@@ -489,7 +505,6 @@ impl NebulaWorkspace {
         let foreground = theme.foreground;
         let muted = theme.muted_foreground;
         let border = theme.border;
-        let language = crate::gpui_shell::config::ui_language(cx);
         let viewport = window.viewport_size();
         let panel_width =
             PANEL_MAX_WIDTH.min((f32::from(viewport.width) - PANEL_MARGIN * 2.0).max(0.0));

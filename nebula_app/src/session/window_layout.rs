@@ -51,6 +51,21 @@ impl Session {
         }
     }
 
+    pub(crate) fn startup_window_state(&self) -> Option<WindowState> {
+        if self.boot_attempts >= super::MAX_BOOT_ATTEMPTS {
+            return None;
+        }
+        self.window
+            .or_else(|| {
+                self.window_layout
+                    .iter()
+                    .find(|layout| layout.active)
+                    .and_then(|layout| layout.window)
+            })
+            .or_else(|| self.window_layout.first().and_then(|layout| layout.window))
+            .filter(|window| window.width > 0 && window.height > 0)
+    }
+
     /// Open the previously active window last so native activation restores it.
     /// Invalid boundaries are an error, never permission to drop or duplicate tabs.
     pub(crate) fn into_update_windows(self) -> std::io::Result<Vec<Session>> {
@@ -107,7 +122,14 @@ mod tests {
     }
 
     fn geometry(x: i32) -> WindowState {
-        WindowState { x: Some(x), y: Some(80), width: 1200, height: 720, maximized: false }
+        WindowState {
+            x: Some(x),
+            y: Some(80),
+            width: 1200,
+            height: 720,
+            maximized: false,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -167,6 +189,36 @@ mod tests {
         combined.window = None;
         combined.recover_window_geometry();
         assert_eq!(combined.window, first.window);
+    }
+
+    #[test]
+    fn startup_geometry_survives_atomic_empty_and_multiwindow_roundtrips() {
+        let first = WindowState {
+            width: 1300,
+            height: 800,
+            position: Some((-1500, 120)),
+            display: Some([7; 16]),
+            ..Default::default()
+        };
+        let active =
+            WindowState { width: 1100, height: 700, maximized: true, ..Default::default() };
+        let mut left = window(&["/first"], 0);
+        left.window = Some(first);
+        let mut right = window(&[], 0);
+        right.window = Some(active);
+        let combined = combine_sessions([(false, left), (true, right)]).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("session.json");
+        crate::session::save_to(&path, &combined).unwrap();
+        let mut loaded = crate::session::load_from(&path).unwrap();
+        assert_eq!(loaded.startup_window_state(), Some(active));
+        assert_eq!(loaded.clone().into_update_windows().unwrap()[0].window, Some(first));
+        loaded.boot_attempts = super::super::MAX_BOOT_ATTEMPTS;
+        assert_eq!(loaded.startup_window_state(), None);
+        let legacy: WindowState =
+            serde_json::from_str(r#"{"width":900,"height":650,"maximized":false}"#).unwrap();
+        assert_eq!(legacy.position, None);
+        assert_eq!(legacy.display, None);
     }
 
     #[test]

@@ -6,8 +6,7 @@ pub(in crate::gpui_shell::workspace) fn observe_window_bounds(
     window: &mut Window,
     cx: &mut Context<NebulaWorkspace>,
 ) {
-    cx.observe_window_bounds(window, move |workspace, window, cx| {
-        workspace.record_window_bounds(window);
+    cx.observe_window_bounds(window, move |_, window, cx| {
         quick_terminal_bounds_changed(id, window, cx);
     })
     .detach();

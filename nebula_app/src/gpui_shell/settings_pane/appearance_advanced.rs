@@ -13,7 +13,7 @@ impl SettingsPane {
         let wallpaper_opacity: SharedString =
             format!("{:.0}%", self.runtime.background_image_opacity * 100.0).into();
         let custom_background = self
-            .group(language.pick("自定义背景", "Custom background"), cx)
+            .group(language.text(crate::i18n::Message::SettingsAppearanceCustomBackground), cx)
             .child(self.background_color_row(cx))
             .child(self.select_row(
                 "background_media_kind",
@@ -33,18 +33,18 @@ impl SettingsPane {
             })
             .child(self.select_row(
                 "background_image_fit",
-                language.pick("背景图像拉伸模式", "Background image fit"),
+                language.text(crate::i18n::Message::SettingsAppearanceBackgroundImageFit),
                 help("background_image_fit", language),
                 cx,
             ))
             .child(self.select_row(
                 "background_image_alignment",
-                language.pick("背景图像对齐", "Background image alignment"),
+                language.text(crate::i18n::Message::SettingsAppearanceBackgroundImageAlignment),
                 help("background_image_alignment", language),
                 cx,
             ))
             .child(self.slider_row(
-                language.pick("背景图像不透明度", "Background image opacity"),
+                language.text(crate::i18n::Message::SettingsAppearanceBackgroundImageOpacity),
                 help("background_image_opacity", language),
                 &self.wallpaper_opacity_slider,
                 wallpaper_opacity,
@@ -52,17 +52,14 @@ impl SettingsPane {
             ))
             .child(self.switch_row(
                 "background_image_cover_chrome",
-                language.pick(
-                    "将背景图扩展到标题栏和侧边栏",
-                    "Extend the background image into the title bar and sidebar",
-                ),
+                language.text(crate::i18n::Message::SettingsAppearanceExtendTheBackgroundImageInto),
                 help("background_image_cover_chrome", language),
                 self.runtime.background_image_cover_chrome,
                 cx,
             ))
             .child(self.custom_effect_settings(window, cx));
         let cursor = self
-            .group(language.pick("光标", "Cursor"), cx)
+            .group(language.text(crate::i18n::Message::CommonCursor), cx)
             .child(self.select_row(
                 "cursor_motion",
                 language.text(crate::i18n::Message::SettingsCursorMotionTitle),
@@ -71,19 +68,25 @@ impl SettingsPane {
             ))
             .child(self.select_row(
                 "cursor_shape",
-                language.pick("光标形状", "Cursor shape"),
+                language.text(crate::i18n::Message::SettingsAppearanceCursorShape),
                 help("cursor_shape", language),
                 cx,
             ))
             .child(self.switch_row(
                 "cursor_blink",
-                language.pick("光标闪烁", "Blink cursor"),
+                language.text(crate::i18n::Message::SettingsAppearanceBlinkCursor),
                 help("cursor_blink", language),
                 self.runtime.cursor_blink.unwrap_or(DEFAULT_CURSOR_BLINK),
                 cx,
             ));
         let interface = self
-            .group(language.pick("界面", "Interface"), cx)
+            .group(language.text(crate::i18n::Message::ThemeEditorPreviewInterface), cx)
+            .child(self.row(
+                language.text(crate::i18n::Message::SettingsFontUiFamily),
+                language.text(crate::i18n::Message::SettingsFontUiFamilyDescription),
+                Input::new(&self.ui_font_family_input).w(px(240.0)),
+                cx,
+            ))
             .child(self.font_size_row(true, cx))
             .child(self.switch_row(
                 "animations",
@@ -101,7 +104,7 @@ impl SettingsPane {
             ))
             .child(self.switch_row(
                 "tab_close_visible",
-                language.pick("显示标签关闭按钮", "Show tab close buttons"),
+                language.text(crate::i18n::Message::SettingsAppearanceShowTabCloseButtons),
                 help("tab_close_visible", language),
                 self.runtime.tab_close_visible,
                 cx,
@@ -114,12 +117,12 @@ impl SettingsPane {
             ))
             .child(self.select_row(
                 "density",
-                language.pick("界面外观", "Interface density"),
+                language.text(crate::i18n::Message::SettingsAppearanceInterfaceDensity),
                 help("density", language),
                 cx,
             ))
             .child(self.slider_row(
-                language.pick("终端正文不透明度", "Terminal content opacity"),
+                language.text(crate::i18n::Message::SettingsOpacityTitle),
                 help("opacity", language),
                 &self.opacity_slider,
                 opacity,
@@ -127,13 +130,14 @@ impl SettingsPane {
             ))
             .child(self.select_row(
                 "blur",
-                language.pick("背景模糊", "Background blur"),
+                language.text(crate::i18n::Message::SettingsAppearanceBackgroundBlur),
                 help("blur", language),
                 cx,
             ));
-        let terminal =
-            self.group(language.pick("终端外观", "Terminal appearance"), cx)
-                .child(self.switch_row(
+        let terminal = self
+            .group(language.text(crate::i18n::Message::SettingsAppearanceTerminalAppearance), cx)
+            .child(
+                self.switch_row(
                     "terminal_label_badges",
                     language.text(crate::i18n::Message::SettingsAppearanceTerminalLabelBadges),
                     language.text(
@@ -141,66 +145,67 @@ impl SettingsPane {
                     ),
                     self.runtime.terminal_label_badges,
                     cx,
-                ))
-                .child(self.row(
-                    language.text(crate::i18n::Message::SettingsFontEnglish),
-                    help("font_family", language),
-                    font_picker,
-                    cx,
-                ))
-                .child(self.row(
-                    language.text(crate::i18n::Message::SettingsFontChinese),
-                    language.text(crate::i18n::Message::SettingsFontChineseDescription),
-                    cjk_font_picker,
-                    cx,
-                ))
-                .child(self.font_size_row(false, cx))
-                .child(self.switch_row(
-                    "ctrl_wheel_font_zoom",
-                    language.text(crate::i18n::Message::SettingsFontCtrlWheelZoom),
-                    language.text(crate::i18n::Message::SettingsFontCtrlWheelZoomDescription),
-                    self.runtime.ctrl_wheel_font_zoom,
-                    cx,
-                ))
-                .child(self.select_row(
-                    "ligatures",
-                    language.text(crate::i18n::Message::SettingsFontLigatures),
-                    language.text(crate::i18n::Message::SettingsFontLigaturesDescription),
-                    cx,
-                ))
-                .child(self.select_row(
-                    "cell_width_mode",
-                    language.pick("字体间距", "Character spacing"),
-                    help("cell_width_mode", language),
-                    cx,
-                ))
-                .child(self.select_row(
-                    "scrollback_lines",
-                    language.text(crate::i18n::Message::SettingsScrollingHistory),
-                    language.text(crate::i18n::Message::SettingsScrollingHistoryDescription),
-                    cx,
-                ))
-                .child(self.scroll_speed_row(cx))
-                .child(self.select_row(
-                    "scrollbar_visibility",
-                    language.text(crate::i18n::Message::SettingsScrollingScrollbar),
-                    language.text(crate::i18n::Message::SettingsScrollingScrollbarDescription),
-                    cx,
-                ))
-                .child(self.switch_row(
-                    "fetch",
-                    language.pick("启动欢迎信息", "Startup system information"),
-                    help("fetch", language),
-                    self.runtime.fetch,
-                    cx,
-                ))
-                .child(self.switch_row(
-                    "powerline",
-                    language.pick("Powerline 提示符", "Powerline prompt"),
-                    help("powerline", language),
-                    self.runtime.powerline,
-                    cx,
-                ));
+                ),
+            )
+            .child(self.row(
+                language.text(crate::i18n::Message::SettingsFontEnglish),
+                help("font_family", language),
+                font_picker,
+                cx,
+            ))
+            .child(self.row(
+                language.text(crate::i18n::Message::SettingsFontChinese),
+                language.text(crate::i18n::Message::SettingsFontChineseDescription),
+                cjk_font_picker,
+                cx,
+            ))
+            .child(self.font_size_row(false, cx))
+            .child(self.switch_row(
+                "ctrl_wheel_font_zoom",
+                language.text(crate::i18n::Message::SettingsFontCtrlWheelZoom),
+                language.text(crate::i18n::Message::SettingsFontCtrlWheelZoomDescription),
+                self.runtime.ctrl_wheel_font_zoom,
+                cx,
+            ))
+            .child(self.select_row(
+                "ligatures",
+                language.text(crate::i18n::Message::SettingsFontLigatures),
+                language.text(crate::i18n::Message::SettingsFontLigaturesDescription),
+                cx,
+            ))
+            .child(self.select_row(
+                "cell_width_mode",
+                language.text(crate::i18n::Message::SettingsAppearanceCharacterSpacing),
+                help("cell_width_mode", language),
+                cx,
+            ))
+            .child(self.select_row(
+                "scrollback_lines",
+                language.text(crate::i18n::Message::SettingsScrollingHistory),
+                language.text(crate::i18n::Message::SettingsScrollingHistoryDescription),
+                cx,
+            ))
+            .child(self.scroll_speed_row(cx))
+            .child(self.select_row(
+                "scrollbar_visibility",
+                language.text(crate::i18n::Message::SettingsScrollingScrollbar),
+                language.text(crate::i18n::Message::SettingsScrollingScrollbarDescription),
+                cx,
+            ))
+            .child(self.switch_row(
+                "fetch",
+                language.text(crate::i18n::Message::SettingsAppearanceStartupSystemInformation),
+                help("fetch", language),
+                self.runtime.fetch,
+                cx,
+            ))
+            .child(self.switch_row(
+                "powerline",
+                language.text(crate::i18n::Message::SettingsAppearancePowerlinePrompt),
+                help("powerline", language),
+                self.runtime.powerline,
+                cx,
+            ));
 
         v_flex()
             .w_full()

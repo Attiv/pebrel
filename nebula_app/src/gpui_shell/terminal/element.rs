@@ -51,6 +51,8 @@ mod cell_fit;
 #[path = "element/color_tests.rs"]
 mod color_tests;
 mod reading;
+#[cfg(all(test, feature = "gpui-test-support"))]
+pub(in crate::gpui_shell) mod snapshot_probe;
 
 #[path = "element/app_colors.rs"]
 mod app_colors;
@@ -102,6 +104,7 @@ impl TerminalElement {
 pub struct TermLayout {
     cell_width: Pixels,
     line_height: Pixels,
+    text_baseline: Pixels,
     rows: usize,
     cols: usize,
     hitbox: Hitbox,
@@ -116,15 +119,8 @@ impl TerminalElement {
         rows: usize,
         cols: usize,
         cx: &App,
-    ) -> Option<(
-        RenderSnapshot,
-        Option<String>,
-        usize,
-        super::osc_links::LinkCells,
-        usize,
-        i64,
-        bool,
-    )> {
+    ) -> Option<(RenderSnapshot, Option<String>, usize, super::osc_links::LinkCells, i64, bool)>
+    {
         let view = self.view.read(cx);
         let session = view.session.as_ref()?;
         let hint_config = view.hint_config.clone();
@@ -139,25 +135,37 @@ impl TerminalElement {
                 &view.suggest.line_buf,
                 &view.suggest.suggest_env,
             )
+            .or_else(|| {
+                if !view.suggest.completion_popup_requested {
+                    return None;
+                }
+                view.suggest.completion_prefix_from_raw_grid(&term, cursor)
+            })
             .map(|line| line.input)
         };
         // 分段只反映内容与宽度类，绝不掺入光标状态：per-cell 绘制下反色只是
         // 换色，若让闪烁相位改变分段，整行会随闪烁重塑形而跳字。
-        let snapshot = RenderSnapshot::capture(
+        let projection = view.native_results.projection.borrow();
+        let source_rows = projection.source_rows(rows);
+        let snapshot = RenderSnapshot::capture_rows(
             &term,
-            &SnapshotConfig { rows: rows as u16, cols: cols as u16 },
+            &SnapshotConfig { rows: source_rows as u16, cols: cols as u16 },
+            |row| !projection.covers(row),
         );
         let history = term.history_size();
-        let dashed = super::osc_links::dashed_cells(&term, &hint_config, rows, cols);
+        let dashed =
+            super::osc_links::dashed_cells_where(&term, &hint_config, source_rows, cols, |row| {
+                !projection.covers(row)
+            });
         let scrollback_floor = term.grid().scrolled_out();
         let image_anchor = scrollback_floor.saturating_add(history) as i64;
         let viewport_top_abs = image_anchor + i64::from(term.viewport_origin_for(rows).0);
+
         Some((
             snapshot,
             prompt_line,
             history,
             dashed,
-            scrollback_floor,
             viewport_top_abs,
             term.mode().contains(TermMode::ALT_SCREEN),
         ))
@@ -273,8 +281,9 @@ impl Element for TerminalElement {
         let scale = window.scale_factor();
         let view = self.view.read(cx);
         let cell_width = view.cell_width_for_advance(sample.width.as_f32(), scale);
-        let line_height =
-            view.line_height_for_metrics(sample.ascent.as_f32() + sample.descent.as_f32(), scale);
+        let line_height = view.line_height_for_width(cell_width, scale);
+        let text_baseline =
+            super::view::typography::baseline(sample.ascent, sample.descent, line_height);
 
         // 网格裁定（floor、最小网格、resize 合流）全部由渲染合同的
         // ViewportTracker 在 view 内完成；元素只上报内容矩形与度量。
@@ -311,6 +320,7 @@ impl Element for TerminalElement {
         TermLayout {
             cell_width,
             line_height,
+            text_baseline,
             rows: view.grid_rows(),
             cols: view.grid_cols(),
             hitbox,
@@ -343,18 +353,13 @@ impl Element for TerminalElement {
         let focused = focus_handle.is_focused(window);
         // 旧壳只让光标本身参与闪烁；ghost、弹窗补齐和 IME 仍复用同一个坐标锚点。
         let cursor_visible = self.view.read(cx).cursor_visible();
-        let Some((
-            mut snap,
-            prompt_line,
-            history,
-            mut dashed,
-            scrollback_floor,
-            viewport_top_abs,
-            alternate_screen,
-        )) = self.snapshot(layout.rows, layout.cols, cx)
+        let Some((mut snap, prompt_line, history, mut dashed, viewport_top_abs, alternate_screen)) =
+            self.snapshot(layout.rows, layout.cols, cx)
         else {
             return;
         };
+        #[cfg(all(test, feature = "gpui-test-support"))]
+        snapshot_probe::record(&self.view, &snap, bounds, layout, cx);
         let suggest_anchor =
             snap.cursor.as_ref().map(|cursor| (cursor.row as usize, cursor.col as usize));
         self.view.update(cx, |view, cx| {
@@ -401,8 +406,13 @@ impl Element for TerminalElement {
             );
             self.view.update(cx, |view, cx| {
                 view.math.bind_resources(cx);
-                let size_info =
-                    super::math_overlay::grid_size_info(layout.cols, layout.rows, cell_w, line_h);
+                let vertical = view.native_results.projection.borrow();
+                let size_info = super::math_overlay::grid_size_info(
+                    layout.cols,
+                    vertical.source_rows(layout.rows),
+                    cell_w,
+                    line_h,
+                );
                 if view.reading.panel.is_some() {
                     return view.math.clear_frame(&size_info, math_pixels_per_point);
                 }
@@ -413,7 +423,14 @@ impl Element for TerminalElement {
                     return view.math.clear_frame(&size_info, math_pixels_per_point);
                 };
                 let term = term.lock();
-                view.math.plan_frame(&term, &size_info, foreground, font_px, math_pixels_per_point)
+                view.math.plan_frame(
+                    &term,
+                    &size_info,
+                    foreground,
+                    font_px,
+                    math_pixels_per_point,
+                    |row| !vertical.covers(row),
+                )
             })
         };
         // 位图预检必须在格子绘制之前、term 锁之外：合成不出位图的公式不能进
@@ -423,6 +440,8 @@ impl Element for TerminalElement {
             .view
             .update(cx, |view, cx| view.math.finalize_frame(pending_math_frame, scale_factor, cx));
 
+        let vertical = self.view.read(cx).native_results.projection.borrow().clone();
+        let row_y = |row: f32| layout.line_height * vertical.row(row);
         let label_rows = classify_badge_rows(
             &snap,
             labels_enabled,
@@ -449,7 +468,7 @@ impl Element for TerminalElement {
             Bounds::new(
                 point(
                     bounds.origin.x + layout.cell_width * start as f32,
-                    bounds.origin.y + layout.line_height * row as f32,
+                    bounds.origin.y + row_y(row as f32),
                 ),
                 size(layout.cell_width * count as f32, layout.line_height),
             )
@@ -476,6 +495,10 @@ impl Element for TerminalElement {
                 .cursor
                 .as_ref()
                 .map_or(0, |c| target_col as i32 - i32::from(c.col)),
+            row_projection_shift: snap
+                .cursor
+                .as_ref()
+                .map_or(0.0, |c| vertical.row(c.row as f32) - c.row as f32),
             shape: snap.cursor.as_ref().map_or(CursorShape::Hidden, |c| c.shape),
         };
         let visual = self.view.update(cx, |view, cx| {
@@ -483,7 +506,7 @@ impl Element for TerminalElement {
                 snap.cursor.as_ref(),
                 target_col,
                 cursor_geometry,
-                snap.display_offset == 0,
+                vertical.scroll_state().map_or(snap.display_offset == 0, |(offset, _)| offset == 0),
                 window,
                 cx,
             )
@@ -721,7 +744,7 @@ impl Element for TerminalElement {
             };
             let origin = point(
                 snap_to_device(bounds.origin.x + layout.cell_width * visual_col as f32, scale),
-                snap_to_device(bounds.origin.y + layout.line_height * glyph.row as f32, scale),
+                snap_to_device(bounds.origin.y + row_y(glyph.row as f32), scale),
             );
             paint_box_glyph(window, &prims, origin, fg);
             if let Some(cursor) = &cursor_paint {
@@ -788,7 +811,7 @@ impl Element for TerminalElement {
                 };
                 let origin = point(
                     bounds.origin.x + layout.cell_width * visual_col as f32,
-                    bounds.origin.y + layout.line_height * seg.row as f32,
+                    bounds.origin.y + row_y(seg.row as f32),
                 );
                 let count = if ligatures && !seg.wide && !dashed_link {
                     super::ligatures::span_len(remaining, |next, offset| {
@@ -817,6 +840,15 @@ impl Element for TerminalElement {
                         run.clone(),
                         layout.cell_width,
                     );
+                    let origin = point(
+                        origin.x,
+                        super::view::typography::glyph_origin_y(
+                            &shaped,
+                            origin.y,
+                            layout.line_height,
+                            layout.text_baseline,
+                        ),
+                    );
                     let _ = shaped.paint(
                         origin,
                         layout.line_height,
@@ -843,6 +875,15 @@ impl Element for TerminalElement {
                         font_size,
                         &run,
                         layout.cell_width,
+                    );
+                    let origin = point(
+                        origin.x,
+                        super::view::typography::glyph_origin_y(
+                            &shaped,
+                            origin.y,
+                            layout.line_height,
+                            layout.text_baseline,
+                        ),
                     );
                     let _ = shaped.paint(
                         origin,
@@ -907,6 +948,7 @@ impl Element for TerminalElement {
                 (layout.cell_width.as_f32(), layout.line_height.as_f32()),
                 math_pixels_per_point,
                 Rgba { a: 1.0, ..selection_fill },
+                &|y| row_y(y / layout.line_height.as_f32()).as_f32(),
                 window,
                 cx,
             );
@@ -923,45 +965,17 @@ impl Element for TerminalElement {
             cx,
         );
 
-        // Terminal images are ordinary scrollback content: the PTY reader
-        // reserved rows when it saw the protocol sequence, while this pass
-        // paints only images intersecting the current viewport. GPUI caches
-        // each RenderImage texture by ID, so steady-state scrolling is one
-        // clipped textured quad rather than a repeated decode/upload.
-        let inline_images =
-            self.view.update(cx, |view, _| view.inline_images.frame_images(scrollback_floor));
-        if !inline_images.is_empty() {
-            let device_scale = window.scale_factor().max(0.1);
-            let viewport_top = bounds.origin.y.as_f32();
-            let viewport_bottom = viewport_top + bounds.size.height.as_f32();
-            for inline in inline_images {
-                let y = bounds.origin.y
-                    + layout.line_height * (inline.abs_line as i64 - viewport_top_abs) as f32;
-                let mut width = inline.display_width / device_scale;
-                let mut height = inline.display_height / device_scale;
-                let fit = (bounds.size.width.as_f32() / width.max(1.0)).min(1.0);
-                width *= fit;
-                height *= fit;
-                let image_top = y.as_f32();
-                if image_top + height <= viewport_top || image_top >= viewport_bottom {
-                    continue;
-                }
-                let target = Bounds::new(
-                    point(bounds.origin.x, y),
-                    size(px(width.max(1.0)), px(height.max(1.0))),
-                );
-                window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                    let _ = window.paint_image(
-                        target,
-                        target,
-                        Corners::all(px(0.0)),
-                        inline.image,
-                        0,
-                        false,
-                    );
-                });
-            }
-        }
+        let inline_images = self.view.update(cx, |view, _| view.inline_images.frame_images());
+        let image_runs = math_frame.project_image_runs(&snap.image_runs, layout.cols);
+        super::inline_image::paint(
+            &inline_images,
+            &image_runs,
+            bounds,
+            layout.cell_width,
+            layout.line_height,
+            &row_y,
+            window,
+        );
 
         if snap.cursor.is_none() {
             super::effects::paint(
@@ -1006,7 +1020,7 @@ impl Element for TerminalElement {
                             colors.ghost,
                             point(
                                 bounds.origin.x + layout.cell_width * cursor_visual_col as f32,
-                                bounds.origin.y + layout.line_height * cursor.row as f32,
+                                bounds.origin.y + row_y(cursor.row as f32),
                             ),
                             layout.cell_width,
                             layout.line_height,
@@ -1043,7 +1057,7 @@ impl Element for TerminalElement {
                     popup_selected,
                     popup_offset,
                     popup_hovered,
-                    cursor.row as usize,
+                    vertical.row(cursor.row as f32).max(0.0) as usize,
                     cursor_visual_col,
                     layout,
                     &bounds,
@@ -1126,7 +1140,7 @@ impl Element for TerminalElement {
                 window,
                 cx,
                 &hover.preview,
-                hover.anchor_row as usize,
+                vertical.row(hover.anchor_row as f32).max(0.0) as usize,
                 anchor_col,
                 layout,
                 &bounds,

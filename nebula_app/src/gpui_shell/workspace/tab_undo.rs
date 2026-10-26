@@ -270,6 +270,7 @@ impl NebulaWorkspace {
             self.runtime_window_id,
             self.snapshot_session(cx),
             session_persistence::SaveReason::TabsClosed,
+            window,
             cx,
         ) {
             log::warn!("Could not save closed tabs: {error}");
