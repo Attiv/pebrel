@@ -6,21 +6,23 @@ Every release entry is provided in English and Simplified Chinese.
 
 ## 2.3.1 - 2026-10-27
 
-- `Pebrel-v2.3.1-android-universal-preview.apk`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-linux-x64-preview.AppImage`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-linux-x64-preview.deb`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-linux-x64-preview.tar.gz`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-macos-x64-preview.dmg`: `PENDING FINAL BUILD`
-- `Pebrel-v2.3.1-relay-manual.tar.gz`: `PENDING FINAL BUILD`
-- `Pebrel-v2.3.1-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
-- `Pebrel-v2.3.1-windows-arm64.zip`: `PENDING FINAL BUILD`
-- `Pebrel-v2.3.1-windows-x64-setup.exe`: `PENDING FINAL BUILD`
 - `Pebrel-v2.3.1-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.3.1-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.3.1-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.3.1-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.3.1-android-universal-preview.apk`: `PENDING FINAL BUILD`
+- `Pebrel-v2.3.1-relay-manual.tar.gz`: `PENDING FINAL BUILD`
 
 ### English
 
-This release synchronizes the fork with upstream Pebrel 2.3.1. Fork-specific SSH local and remote port forwarding with forwarding warnings, Codex tool emphasis, terminal label badges, undo closed tab, macOS command-line editing and reduced-motion gating remain available. Packages include Windows x64/ARM64 installers and portable ZIPs, macOS Apple Silicon/Intel builds, Linux x64 packages, an Android universal APK and the offline relay package. macOS, Linux and Android retain their Preview distribution labels.
+This release synchronizes the fork with upstream Pebrel 2.3.1. It restores comfortable terminal text spacing while keeping supported character-art logos in proportion, makes the default interface font explicit and updates the approved sponsor presentation. Fork-specific SSH local and remote port forwarding with forwarding warnings, Codex tool emphasis, terminal label badges, undo closed tab, macOS command-line editing and reduced-motion gating remain available.
+
+Packages include Windows x64/ARM64 installers and portable ZIPs, macOS Apple Silicon/Intel builds, Linux x64 packages, an Android universal APK and the offline relay package. macOS, Linux and Android retain their Preview distribution labels.
 
 #### Fixed
 
@@ -36,7 +38,9 @@ This release synchronizes the fork with upstream Pebrel 2.3.1. Fork-specific SSH
 
 ### 中文
 
-本维护版本将 fork 同步至上游 Pebrel 2.3.1。fork 特有的 SSH 本地与远程端口转发及转发告警、Codex 工具强调、终端标签徽章、撤销关闭标签页、macOS 命令行编辑与减弱动效门控继续保留。提供 Windows x64/ARM64 安装器与便携 ZIP、macOS Apple Silicon/Intel 包、Linux x64 包、Android universal APK 及离线中继包。macOS、Linux 和 Android 继续保留 Preview 分发标记。
+本维护版本将 fork 同步至上游 Pebrel 2.3.1，恢复舒适的终端正文行距，同时保持受支持字符画标志的正确比例，并让界面默认字体显示更明确、同步已批准的赞助商展示。fork 特有的 SSH 本地与远程端口转发及转发告警、Codex 工具强调、终端标签徽章、撤销关闭标签页、macOS 命令行编辑与减弱动效门控继续保留。
+
+提供 Windows x64/ARM64 安装器与便携 ZIP、macOS Apple Silicon/Intel 包、Linux x64 包、Android universal APK 及离线中继包。macOS、Linux 和 Android 继续保留 Preview 分发标记。
 
 #### 修复
 
