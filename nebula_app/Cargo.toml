@@ -368,6 +368,6 @@ video-background = [
 ]
 gif-background = ["video-background", "dep:gif"]
 shader-background = ["gif-background", "dep:naga", "gpui/wgsl-postprocess", "windows/Win32_Graphics_Direct3D_Fxc"]
-gpui-test-support = ["gpui-shell", "gpui/test-support", "gpui-component/test-support"]
+gpui-test-support = ["gpui-shell", "gpui/test-support", "gpui_platform/test-support", "gpui-component/test-support"]
 # Explicit local updater acceptance harness; compile-rejected in release builds.
 update-test-source = ["gpui-shell"]
