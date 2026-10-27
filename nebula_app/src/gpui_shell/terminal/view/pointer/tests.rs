@@ -158,6 +158,12 @@ fn character_art_drag_maps_visual_rows_back_to_exact_source_text(cx: &mut TestAp
     });
     draw(&mut cx);
     draw(&mut cx);
+    // 启动宽限期内首次视口提交会被推迟（layout.rs 的
+    // `schedule_startup_grid_sync`）。不跳过宽限期就取基准，会拿到构造时
+    // 的 (80, 24) 而不是窗口 resize 后的真实网格；机器快慢不同会让拖拽后
+    // 的取样变成"初值 vs 真值"而误报。与同文件其它用例一致，先跳过宽限期。
+    terminal.update(&mut cx, |view, _| view.spawn_at -= TerminalView::STARTUP_GRID_GRACE);
+    draw(&mut cx);
     let (start, end, grid) = terminal.read_with(&cx, |view, _| {
         let (top, height) = view.character_art.frame.cell(3, 4, 3.0);
         assert!(height < 1.0, "the actual terminal element must mount character-art geometry");
