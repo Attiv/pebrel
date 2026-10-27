@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 fn fixture() -> String {
     let mut vt = String::from("\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H");
-    // 默认网格的横纵点距必须相等；正文仍保持指定字号。
+    // 字符画展示当前真实网格；正文行距以 2.2.2 的字体度量为准。
     // 右侧同时保留正文和接缝样例，避免只验收字符画而忽视阅读效果。
     for row in 0..17 {
         vt.push_str(&format!("\x1b[{};1H", row + 1));
@@ -77,25 +77,11 @@ fn native_character_grid_preserves_art_text_and_viewport() {
         assert!(font_size.is_finite() && (10.0..=24.0).contains(&font_size));
         settings.font_size_px = font_size;
         settings.base_font_size_px = font_size;
-        assert_eq!(
-            (settings.font_offset_x, settings.font_offset_y),
-            (0.0, 0.0)
-        );
-        // A/B 只改行框，证明正文轮廓不因网格策略改变；不写入用户配置。
-        let natural_rows = std::env::var_os("PEBREL_GRID_QA_NATURAL_ROWS").is_some();
-        if natural_rows {
-            crate::gpui_shell::font_loading::ensure_family(&settings.font_family, cx);
-            let text = gpui::WindowTextSystem::new(cx.text_system().clone());
-            let sample = text.shape_line("M".into(), px(font_size), &[gpui::TextRun {
-                len: 1, font: super::mono_font(&settings.font_family, FontWeight::NORMAL, FontStyle::Normal, false),
-                color: gpui::white(), background_color: None, underline: None, strikethrough: None,
-            }], None);
-            settings.theme_line_height = Some((sample.ascent + sample.descent).as_f32() / font_size);
-            settings.font_offset_y = match crate::platform::Platform::current() {
-                crate::platform::Platform::Windows => 4.0,
-                _ => 0.0,
-            };
-        }
+        let default_offset_y = match crate::platform::Platform::current() {
+            crate::platform::Platform::Windows => 4.0,
+            _ => 0.0,
+        };
+        assert_eq!((settings.font_offset_x, settings.font_offset_y), (0.0, default_offset_y));
         cx.set_global(settings);
         crate::gpui_shell::theme::apply_chrome_theme(cx);
         let mut terminal = None;
@@ -150,7 +136,6 @@ fn native_character_grid_preserves_art_text_and_viewport() {
                 let view = terminal.read(cx);
                 let (w, h) = super::cell_metrics(window, cx);
                 assert_eq!((view.cell_width, view.line_height), (w, h));
-                if !natural_rows { assert!((h.as_f32() - 2.0 * w.as_f32()).abs() < 1e-5); }
                 let term = view.session.as_ref().unwrap().term.lock();
                 assert_eq!((term.columns(), term.screen_lines()), (view.cols, view.rows));
                 let font_id = cx.text_system().resolve_font(&view.font);
@@ -158,6 +143,9 @@ fn native_character_grid_preserves_art_text_and_viewport() {
                     &[gpui::TextRun { len: 1, font: view.font.clone(), color: gpui::white(),
                         background_color: None, underline: None, strikethrough: None }], None);
                 assert_eq!(shaped.runs[0].font_id, font_id);
+                let expected = ((shaped.ascent.as_f32() + shaped.descent.as_f32())
+                    * window.scale_factor() + default_offset_y).floor() / window.scale_factor();
+                assert!((h.as_f32() - expected).abs() < 1e-5, "default rows match 2.2.2");
                 let text_probes = ["M", "gypq", "中文", "ÅÉêǺé"].into_iter().map(|text| {
                     let line = window.text_system().shape_line(text.into(), view.font_size,
                         &[gpui::TextRun { len: text.len(), font: view.font.clone(), color: gpui::white(),
@@ -172,7 +160,7 @@ fn native_character_grid_preserves_art_text_and_viewport() {
                     "ascent": shaped.ascent.as_f32(), "descent": shaped.descent.as_f32(),
                     "cell": [w.as_f32(), h.as_f32()], "grid": [view.cols, view.rows],
                     "origin": [view.origin.x.as_f32(), view.origin.y.as_f32()],
-                    "text_probes": text_probes, "natural_rows": natural_rows, "draw_cpu_ms": costs})
+                    "text_probes": text_probes, "draw_cpu_ms": costs})
             }).unwrap();
             std::fs::write(output.join("metrics.json"), serde_json::to_vec_pretty(&metrics).unwrap()).unwrap();
             for _ in 0..100 {
