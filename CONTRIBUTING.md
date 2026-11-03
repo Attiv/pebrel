@@ -141,7 +141,13 @@ raise any existing tracked private artifact for an explicit maintainer decision.
    they must not fork persistence, state transitions or domain behavior.
 4. Add regression tests that fail for the defect, and test error/cancellation
    paths where relevant. Explain what was actually run and what was not.
-5. Fill in the PR template. A green build is necessary, not sufficient: a
+5. Document the feature in the same change. Add or update its entry in the matching
+   `One Workspace` / `一个工作区` subsection of **both** `README.md` and
+   `README.zh-CN.md`, in the same position on each side. Describe what a user sees
+   and any precondition, not internal modules or implementation; if no existing
+   subsection fits, agree on a new one with a maintainer first. Internal refactors,
+   defect fixes, dependency, build and CI changes need no README entry.
+6. Fill in the PR template. A green build is necessary, not sufficient: a
    maintainer must also review cohesion, public interfaces, compatibility and cost.
 
 ## Local checks
@@ -249,4 +255,5 @@ feature work; there is no routine `--skip-architecture` option.
 - 普通功能 PR 不得增加存量债务；有问题的规则可以修订，但要有反例、测试和维护者审批。
 - 新增核心抽象、依赖方向、持久化或线程模型改变要先说明设计，不强迫每个小修复写 ADR。
 - 修改热路径要给出成本证据；不能为了“可扩展”增加没有实际用途的框架。
+- 用户可见的新功能或可见行为变化，同一改动内同步更新 `README.md` 与 `README.zh-CN.md` 的 `One Workspace` / `一个工作区` 对应小节，两侧条目位置一致；写用户看到的效果与前提，不写内部实现。纯重构、缺陷修复、依赖与构建改动不写 README。
 - PR 要附实际测试结果；本地钩子和勾选框不代替服务端必需检查与人工评审。

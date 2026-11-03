@@ -11,6 +11,7 @@
 - 普通翻译查询维持已测零分配合同；参数格式化和冷路径另行评估。不能把单机微基准写成普遍性能保证。
 - 不得声称仅加入 workflow 或 `CODEOWNERS` 就已启用 GitHub 强制保护；服务端设置及负例 PR 验证须另行获准并核验。
 - `docs/` 记录经过核验的当前事实；非平凡改动的决策、被否定方案和事故因果写入与代码职责同路径的 `architecture/notes/`。遵循 [note 规则](architecture/notes/AGENTS.md)，普通样式修改和单文件修复不写 note。
+- 用户可见的新功能或可见行为变化，必须在**同一改动**内写进 `README.md` 与 `README.zh-CN.md`：按主题归入 `One Workspace` / `一个工作区` 下已有的对应小节（Terminals and Sessions / 终端与会话、Intelligent Completion / 智能补齐、SSH and Files / SSH 与文件、AI CLI Workflows / AI CLI 工作流、A Native, Configurable Interface / 原生、可配置的界面），两侧条目位置与数量保持对应。只写用户看到的效果和前提条件，不写内部模块名、函数名或实现细节；现有小节都放不下时先与维护者确认是否新增小节，不硬塞进相邻小节。纯内部重构、缺陷修复、依赖/构建/CI 改动不写 README。
 
 ## 分层入口
 
