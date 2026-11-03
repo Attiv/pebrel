@@ -1486,25 +1486,76 @@ impl NebulaWorkspace {
         })
     }
 
-    fn focus_active(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.settings_open {
-            if let Some((view, _)) = self.settings_surface.as_ref() {
-                let focus = view.read(cx).focus_handle(cx);
-                window.defer(cx, move |window, cx| window.focus(&focus, cx));
-            }
+    /// 整 tab 关闭（侧栏 ×）逐 pane 回收会话；最后一个 tab 按驻留设置关窗。
+    /// 实体引用清零后 `TerminalView::drop` 再兜底。
+    fn close_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.guard_file_tab_close(ix, window, cx) {
             return;
         }
-        let focus = match self.tabs.get(self.active) {
-            Some(tab @ WorkspaceTab::Terminal { .. }) => match tab.focused_view() {
-                Some(view) => view.read(cx).focus_handle(cx),
-                None => return,
+        self.finish_close_tab(ix, window, cx);
+    }
+
+    fn finish_close_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        // Focus mode is scoped to the current document view. Closing any tab
+        // must first restore workspace chrome so an old entity cannot leave the
+        // next active tab in an immersive layout.
+        self.clear_reader_focus(cx);
+        let Some((tab, _meta)) = self.remove_tab_at(ix) else { return };
+        if let WorkspaceTab::Terminal { panes, .. } = &tab {
+            let mut bounds = self.pane_bounds.borrow_mut();
+            for pane in panes {
+                self.runtime_hub.record_pane_closed(self.runtime_window_id, pane.id);
+                pane.view.read(cx).shutdown();
+                self.remote_browser.forget(pane.id);
+                bounds.remove(&pane.id);
+            }
+        }
+
+        if self.tabs.is_empty() {
+            if self.settings_tab_open {
+                self.open_settings(window, cx);
+            } else {
+                self.close_empty_workspace(window, cx);
+                return;
+            }
+        }
+        if ix < self.active {
+            self.active -= 1;
+        }
+        self.active = self.active.min(self.tabs.len().saturating_sub(1));
+        if let Err(error) = windowing::save_current_window_session(
+            self.runtime_window_id,
+            self.snapshot_session(cx),
+            session_persistence::SaveReason::TabsClosed,
+            window,
+            cx,
+        ) {
+            log::warn!("Could not save closed tabs: {error}");
+        }
+        self.reveal_active_tab();
+        self.focus_active(window, cx);
+        self.sync_side_panel_to_active(true, cx);
+        cx.notify();
+    }
+
+    /// ctrl+shift+w（对齐旧壳 CloseTab 语义）：tab 有分屏时关聚焦 pane，
+    /// 单 pane 时关整个 tab；设置 tab 直接关 tab。
+    fn close_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_open {
+            self.close_settings(window, cx);
+            return;
+        }
+        match self.tabs.get(self.active) {
+            Some(WorkspaceTab::Terminal { panes, focused, .. }) if panes.len() > 1 => {
+                let (tab_ix, pane_id) = (self.active, *focused);
+                self.request_close_pane(tab_ix, pane_id, window, cx);
             },
-            Some(WorkspaceTab::Settings { view, .. }) => view.read(cx).focus_handle(cx),
-            Some(WorkspaceTab::Document { view, .. }) => view.read(cx).focus_handle(cx),
-            Some(WorkspaceTab::Code { view, .. }) => view.read(cx).focus_handle(cx),
-            Some(WorkspaceTab::Image { .. }) | None => self.tab_focus.clone(),
-        };
-        window.defer(cx, move |window, cx| window.focus(&focus, cx));
+            Some(WorkspaceTab::Terminal { .. }) => {
+                self.request_close_tab(self.active, window, cx);
+            },
+            Some(_) => self.close_tab(self.active, window, cx),
+            None => {},
+        }
     }
 
     /// 聚焦 tab 的**宿主可见** cwd。必须先识别 WSL，再读 `local_cwd()`：Windows
