@@ -79,7 +79,7 @@ class StableReleaseTests(unittest.TestCase):
     def release_job_runs(
         self, workflow: str, job: str, results: dict[str, str], include_android: str,
         *, cancelled: bool = False, windows_only: bool = False,
-        event: str = "workflow_dispatch", publish: bool = False,
+        event: str = "workflow_dispatch", publish: bool = False, include_linux: str = "true",
     ) -> bool:
         section = workflow.split(f"\n  {job}:\n", 1)[1]
         guard = section.split("if:", 1)[1].split("\n    needs:", 1)[0]
@@ -90,6 +90,7 @@ class StableReleaseTests(unittest.TestCase):
             "cancelled()": repr(cancelled), "inputs.windows_only": repr(windows_only),
             "inputs.publish": repr(publish), "github.event_name": repr(event),
             "needs.prepare.outputs.include_android": repr(include_android),
+            "needs.prepare.outputs.include_linux": repr(include_linux),
         }
         values.update({f"needs.{name}.result": repr(value) for name, value in results.items()})
         for name, value in values.items():
@@ -104,6 +105,8 @@ class StableReleaseTests(unittest.TestCase):
         self.assertIn("if: ${{ !inputs.windows_only }}", native)
         self.assertIn("uses: ./.github/workflows/linux-lua.yml", native)
         self.assertIn("actions: read", native)
+        self.assertIn("needs: prepare", native)
+        self.assertIn("release_version: ${{ needs.prepare.outputs.version }}", native)
         self.assertNotIn("continue-on-error", native)
         publish = workflow.split("\n  publish:\n", 1)[1]
         self.assertIn("needs: [prepare, native-tests, aggregate]", publish)
@@ -169,7 +172,8 @@ class StableReleaseTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
         self.assertIn("include_android: ${{ steps.metadata.outputs.include_android }}", workflow)
-        self.assertIn('name.endswith(".apk") for name in expected_asset_names(version)', workflow)
+        self.assertIn("names = expected_asset_names(version)", workflow)
+        self.assertIn('name.endswith(".apk") for name in names', workflow)
         desktop = dict.fromkeys(("prepare", "linux", "macos", "windows", "windows-arm64"), "success")
         results = {**desktop, "android": "skipped"}
         self.assertTrue(self.release_job_runs(workflow, "aggregate", results, "false"))
@@ -194,6 +198,34 @@ class StableReleaseTests(unittest.TestCase):
                     self.assertFalse(self.release_job_runs(workflow, "publish", {**verified, job: status}, "false", publish=True))
         self.assertFalse(self.release_job_runs(workflow, "publish", verified, "false", publish=True, cancelled=True))
         self.assertFalse(self.release_job_runs(workflow, "publish", verified, "false", publish=True, windows_only=True))
+
+    def test_excluded_linux_requires_expected_skip_and_included_desktops_still_gate(self) -> None:
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        self.assertIn("include_linux: ${{ steps.metadata.outputs.include_linux }}", workflow)
+        self.assertIn('include_linux = any("-linux-" in name for name in names)', workflow)
+        self.assertIn('include_linux=os.environ["INCLUDE_LINUX"] == "true"', workflow)
+        required = dict.fromkeys(("prepare", "macos", "windows", "windows-arm64"), "success")
+        results = {**required, "linux": "skipped", "android": "skipped"}
+        self.assertTrue(self.release_job_runs(workflow, "aggregate", results, "false", include_linux="false"))
+        for include, status in (("true", "skipped"), ("false", "success"), ("false", "failure"),
+                                ("false", "cancelled"), ("", "skipped"), ("invalid", "skipped")):
+            with self.subTest(include=include, linux=status):
+                self.assertFalse(self.release_job_runs(
+                    workflow, "aggregate", {**results, "linux": status}, "false", include_linux=include,
+                ))
+        for job in required:
+            for status in ("failure", "skipped", "cancelled"):
+                with self.subTest(job=job, status=status):
+                    self.assertFalse(self.release_job_runs(
+                        workflow, "aggregate", {**results, job: status}, "false", include_linux="false",
+                    ))
+        self.assertFalse(self.release_job_runs(
+            workflow, "aggregate", results, "false", include_linux="false", cancelled=True,
+        ))
+        publish = workflow.split("\n  publish:\n", 1)[1]
+        self.assertIn('validate_assets(Path("release-dist"), os.environ["PACKAGE_VERSION"])', publish)
+        self.assertIn('"${assets[@]}" release-dist/SHA256SUMS', publish)
+        self.assertNotIn("release-dist/*.AppImage", publish)
 
     def test_native_packagers_expose_stable_channel_without_preview_id(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -307,6 +339,38 @@ class StableReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(StableReleaseError, "unexpected:"):
                     validate_assets(root, version)
                 (root / unexpected).unlink()
+            (root / expected[-1]).unlink()
+            with self.assertRaisesRegex(StableReleaseError, "missing:"):
+                validate_assets(root, version)
+
+    def test_240_windows_macos_manifest_is_exact_without_rewriting_other_releases(self) -> None:
+        version = "2.4.0"
+        expected = (
+            f"Pebrel-v{version}-macos-arm64-preview.dmg",
+            f"Pebrel-v{version}-macos-x64-preview.dmg",
+            f"Pebrel-v{version}-windows-x64.zip",
+            f"Pebrel-v{version}-windows-x64-setup.exe",
+            f"Pebrel-v{version}-windows-arm64.zip",
+            f"Pebrel-v{version}-windows-arm64-setup.exe",
+        )
+        self.assertEqual(expected_asset_names(version), expected)
+        for ordinary in ("2.3.1", "2.3.2", "2.4.1", "2.5.0"):
+            with self.subTest(ordinary=ordinary):
+                names = expected_asset_names(ordinary)
+                self.assertEqual(len(names), 11)
+                self.assertTrue(any("-linux-" in name for name in names))
+                self.assertTrue(any(name.endswith(".apk") for name in names))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in expected:
+                write_fake_asset(root / name)
+            self.assertEqual(len(validate_assets(root, version)), 6)
+            for suffix in ("linux-x64-preview.AppImage", "android-universal-preview.apk", "relay-manual.tar.gz"):
+                extra = root / f"Pebrel-v{version}-{suffix}"
+                write_fake_asset(extra)
+                with self.assertRaisesRegex(StableReleaseError, "unexpected:"):
+                    validate_assets(root, version)
+                extra.unlink()
             (root / expected[-1]).unlink()
             with self.assertRaisesRegex(StableReleaseError, "missing:"):
                 validate_assets(root, version)

@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "ci_plan.py"
 
 
 class CiPlanCliTests(unittest.TestCase):
-    def run_cli(self, event_name: str, payload: object, output: Path) -> subprocess.CompletedProcess[str]:
+    def run_cli(self, event_name: str, payload: object, output: Path, release_version: str = "") -> subprocess.CompletedProcess[str]:
         repo = output.parent / "repo"
         pr = payload.get("pull_request") if isinstance(payload, dict) else None
         if isinstance(pr, dict) and isinstance(pr.get("draft"), bool) and "base" not in pr and "head" not in pr:
@@ -39,6 +39,8 @@ class CiPlanCliTests(unittest.TestCase):
                 str(event_path),
                 "--output",
                 str(output),
+                "--release-version",
+                release_version,
             ],
             text=True,
             capture_output=True,
@@ -124,6 +126,42 @@ class CiPlanCliTests(unittest.TestCase):
                         [row["os"] for row in plan["release_matrix"]],
                         ["macos-26", "macos-26-intel"],
                     )
+
+    def test_stable_release_hosts_follow_its_manifest_and_report_linux_not_executed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for event in ("push", "workflow_dispatch", "workflow_call"):
+                with self.subTest(event=event):
+                    output = Path(directory) / f"{event}.out"
+                    result = self.run_cli(event, {"ref": "refs/tags/v2.4.0"}, output, "2.4.0")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    plan = self.outputs(output)
+                    self.assertEqual([row["os"] for row in plan["native_matrix"]],
+                                     ["windows-2022", "macos-26", "windows-11-arm", "macos-26-intel"])
+                    self.assertEqual([row["os"] for row in plan["release_matrix"]],
+                                     ["macos-26", "macos-26-intel"])
+                    self.assertEqual(len(plan["check_matrix"]), 7)
+                    self.assertEqual(plan["check_matrix"][0],
+                                     {"name": "Tests (ubuntu-24.04)", "scheduled": "false"})
+                    self.assertTrue(all(row["scheduled"] == "true" for row in plan["check_matrix"][1:]))
+            output = Path(directory) / "future.out"
+            result = self.run_cli("workflow_dispatch", {}, output, "2.4.1")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(self.outputs(output)["native_matrix"]), 5)
+
+    def test_release_scope_cannot_narrow_pr_schedule_merge_group_or_mismatched_tag(self) -> None:
+        cases = (("pull_request", {}, "2.4.0"), ("merge_group", {}, "2.4.0"),
+                 ("schedule", {}, "2.4.0"), ("push", {"ref": "refs/heads/main"}, "2.4.0"),
+                 ("push", {"ref": "refs/tags/v2.3.2"}, "2.4.0"),
+                 ("workflow_call", {}, "2.4.0-preview"), ("workflow_dispatch", {}, "bad"))
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            for event, payload, version in cases:
+                with self.subTest(event=event, payload=payload, version=version):
+                    output.write_text("existing=preserved\n", encoding="utf-8")
+                    result = self.run_cli(event, payload, output, version)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("ci_plan:", result.stderr)
+                    self.assertEqual(output.read_text(encoding="utf-8"), "existing=preserved\n")
 
     def test_invalid_events_fail_without_matrix_outputs(self) -> None:
         cases = (

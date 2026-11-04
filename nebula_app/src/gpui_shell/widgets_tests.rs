@@ -94,6 +94,13 @@ impl Render for SwitchProbe {
                     .disabled(true)
                     .on_click(cx.listener(|_, _, _, _| panic!("disabled switch activated"))),
             )
+            .child(NebulaSwitch::new("small-probe").small().checked(self.checked).on_click(
+                cx.listener(|this, checked, _, cx| {
+                    this.checked = *checked;
+                    this.changes += 1;
+                    cx.notify();
+                }),
+            ))
     }
 }
 
@@ -138,4 +145,13 @@ fn switch_padding_keyboard_and_disabled_state_share_button_activation(cx: &mut T
     let disabled = window.debug_bounds("nebula-switch-disabled-probe").unwrap();
     window.simulate_click(disabled.center(), Modifiers::default());
     window.run_until_parked();
+    let small = window.debug_bounds("nebula-switch-small-probe").unwrap();
+    assert_eq!(small.size, gpui::size(px(32.0), px(32.0)));
+    window
+        .simulate_click(point(small.left() + px(1.0), small.top() + px(1.0)), Modifiers::default());
+    window.run_until_parked();
+    window.update(|_, cx| {
+        assert!(probe.read(cx).checked);
+        assert_eq!(probe.read(cx).changes, 3);
+    });
 }

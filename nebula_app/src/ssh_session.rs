@@ -45,7 +45,7 @@ pub(crate) use integration::setup_cli as setup_ai_cli;
 pub use pane_connection::PaneConnection;
 use probe::parse_host_port;
 pub(crate) use probe::{ssh_config_probe_args, ssh_config_probe_target};
-pub use resume::ResumeTarget;
+pub use resume::{ResumeTarget, TmuxActivity};
 use route::{ResolvedRoute, RouteTransport};
 
 /// Remote terminals have no pre-primed ConPTY handshake or host row anchoring.
@@ -107,6 +107,9 @@ pub trait SshEventHost:
 
     /// Optional configured forwarding failures are independent of progress.
     fn ssh_forward_warning(&self, _warning: ForwardWarning) {}
+
+    /// An observation belongs to this channel's currently active remote pane.
+    fn ssh_tmux_activity(&self, _activity: Option<TmuxActivity>) {}
 
     /// 连接阶段变化（连接卡片/横幅的数据源）。默认丢弃。
     fn ssh_stage(&self, stage: SshStage) {

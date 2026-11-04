@@ -135,7 +135,10 @@ pub(super) fn matching_sections(query: &str, language: crate::display::UiLanguag
     }
 
     let tokens = query.split_whitespace().collect::<Vec<_>>();
+    // Keep prediction/model configuration reachable by deliberate search while
+    // hiding the provider entry from the default sidebar. Route IDs stay stable.
     let mut matches = visible_nav_sections()
+        .chain(std::iter::once(3))
         .filter_map(|index| {
             let message = SECTION_SEARCH_TERMS[index];
             let haystack = format!(
@@ -357,7 +360,8 @@ mod tests {
     #[test]
     fn terminal_label_badges_search_keeps_agent_integration_routes_distinct() {
         for language in [crate::display::UiLanguage::ZhCn, crate::display::UiLanguage::EnUs] {
-            for query in ["圆角", "badges", "日志"] {
+            for query in ["圆角", "圆角终端标签", "rounded terminal labels", "badges", "日志"]
+            {
                 assert_eq!(matching_sections(query, language), vec![1], "{query}");
             }
             for query in ["codex", "claude"] {
@@ -368,9 +372,17 @@ mod tests {
 
     #[test]
     fn shader_and_media_search_find_the_appearance_controls() {
-        for query in
-            ["WGSL", "shader", "terminal effects", "终端效果", "着色器", "视频", "GIF", "动图"]
-        {
+        for query in [
+            "WGSL",
+            "GLSL",
+            "shader",
+            "terminal effects",
+            "终端效果",
+            "着色器",
+            "视频",
+            "GIF",
+            "动图",
+        ] {
             for language in [crate::display::UiLanguage::ZhCn, crate::display::UiLanguage::EnUs] {
                 assert_eq!(matching_sections(query, language).first(), Some(&1), "{query}");
             }

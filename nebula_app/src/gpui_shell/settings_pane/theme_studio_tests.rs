@@ -1206,7 +1206,7 @@ fn native_theme_picker_visual_review() {
     )
     .unwrap();
     gpui_platform::application().with_assets(crate::gpui_shell::NebulaAssets).run(move |cx| {
-        crate::gpui_shell::init(cx, None);
+        crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None));
         let mut pane = None;
         let handle = cx
             .open_window(

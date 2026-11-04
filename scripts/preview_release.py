@@ -47,7 +47,9 @@ def verify_binary_freshness(binary: Path, repo: Path) -> None:
         raise ManifestError(f"binary is older than {stale.relative_to(repo)}; rebuild GPUI before packaging")
 
 
-def validate_evidence(directory: Path, commit: str, *, windows_arm64: bool = False) -> None:
+def validate_evidence(
+    directory: Path, commit: str, *, windows_arm64: bool = False, include_linux: bool = True,
+) -> None:
     root = str(Path(__file__).resolve().parents[1])
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -55,7 +57,10 @@ def validate_evidence(directory: Path, commit: str, *, windows_arm64: bool = Fal
 
     golden = Path(__file__).resolve().parent / "conformance/golden"
     reports = []
-    required_reports = dict(RUNTIME_REPORTS)
+    required_reports = {
+        name: platform for name, platform in RUNTIME_REPORTS.items()
+        if include_linux or not platform.startswith("linux-")
+    }
     if windows_arm64:
         required_reports["windows-arm64-report.json"] = "windows-aarch64"
     for name, platform in required_reports.items():

@@ -104,6 +104,12 @@ each agent's activity, and read its output without leaving the application.
   close the window. Restoring a conversation after the process exits is a separate
   feature and requires a supported CLI and a usable session identity.
 - Context-aware and history completions, configurable keybindings, and integrated shell prompts.
+- Click to move the cursor and drag to select input for deletion in supported
+  Bash/Readline, Zsh/ZLE and PowerShell/PSReadLine prompts. Native shell editing and
+  undo are preserved; unsupported keymaps and uncertain layouts keep terminal selection.
+- Display directly transmitted, uncompressed RGB/RGBA images using the Kitty graphics protocol,
+  alongside existing OSC 1337 images. Storage and transfers are bounded; PNG payloads,
+  file/shared-memory transport, Unicode placeholders and animation are not supported.
 - Saved-command management supports checkbox selection and one confirmation for a
   batch, replacing repeated single-command deletion. Selection mode never runs a
   command; changing the search or folder clears the selection. **Select results**
@@ -168,6 +174,14 @@ discover candidates from the current environment without matching prior commands
 - Saved hosts, SSH config aliases, proxy and jump-host options, private-key and
   keyboard-interactive authentication, and host-key verification.
 - SFTP browsing, uploads and downloads, folder transfers, progress, and cancellation.
+  Ctrl/Shift selection enables batch downloads; hover actions, remote copy/paste and
+  dragging files out are available. Upload/download shortcuts require file-list focus.
+- Preview remote UTF-8 documents while loading; after complete validation, edit and
+  save files up to 8 MiB while preserving BOM and line endings. Invalid or oversized
+  text stays read-only, and server-side changes block conflicting saves.
+- Double-click remote PNG, JPEG, WebP, BMP or GIF files for image previews with
+  progress, cancellation and retry; GIF previews use the first frame. Source images
+  are limited to 64 MiB and decoded frames to 128 MiB.
 - Local file browsing and Git actions alongside your terminals.
 - Duplicated WSL and SSH tabs retain their known working directory.
 
@@ -179,6 +193,16 @@ discover candidates from the current environment without matching prior commands
 
 - Claude Code, Codex, and other recognized CLIs have their own icons and activity
   states. Supported hook events provide more precise progress and attention signals.
+- Task names omit duplicate CLI spinner/progress decoration. Explicit running,
+  permission/input and completion events retain their corresponding indicators;
+  complete hook lifecycles are not replaced by silence or screen guesses.
+- Supported persistent SSH sessions reconnect agent hooks and follow the active pane's
+  task identity. This requires installed Python integration and positively identified
+  POSIX clients; nested service sessions and non-POSIX hosts are not covered.
+- Optional next-message suggestions use recent conversation context when input is
+  empty in supported local Claude Code, Pi and OpenCode sessions launched or resumed
+  through Pebrel. Suggestions are off by default and can use a separate provider/model
+  without changing the agent's main model; their adapters are bundled.
 - Notifications follow their source pane; clicking one returns you to that terminal.
 - Captured Claude Code and Codex answers open in a reader with Markdown, formulas,
   source text, and local image previews. Reader controls and notices follow the
@@ -200,8 +224,14 @@ discover candidates from the current environment without matching prior commands
 - Workspace dialogs, command feedback, Git/SVN controls and default notifications
   follow the selected language. Switching languages preserves command search text
   and selection. See [internationalization](docs/internationalization.md).
-- Searchable settings, a command palette, and Lua configuration with validation and
-  live reload. Existing TOML configuration remains supported.
+- Searchable settings, a command palette, and Luau configuration with validation and
+  live reload. Legacy `.lua` filenames are accepted using Luau syntax/libraries,
+  not full Lua 5.4 compatibility; existing TOML configuration remains supported.
+- Configure native font, tab/sidebar, opacity and pane defaults in `pebrel.luau`.
+  Saved Settings values take priority, and script changes require a restart.
+- Use GLSL (`.glsl`/`.frag`) or WGSL background/terminal effects with configured
+  animation speed, frame rate and numeric parameters. Effects must be enabled;
+  terminal shaders run in their listed order.
 - Markdown document tabs and native mathematical typesetting without a WebView.
 
 <p align="center">
@@ -214,25 +244,25 @@ discover candidates from the current environment without matching prior commands
 
 ## Download
 
-Choose a package from the **[latest release](https://github.com/Kuddev/pebrel/releases/latest)**.
+Choose a package from the **[latest release](https://github.com/Attiv/pebrel/releases/latest)**. This fork’s 2.4.0 release publishes Windows and macOS packages only.
 
 | System | Architecture | Packages |
 | --- | --- | --- |
 | Windows 10 1809+ / 11 | x64 | Installer `.exe`, portable `.zip` |
-| Linux Preview, glibc 2.35+ | x64 | `.AppImage`, `.deb`, portable `.tar.gz` |
+| Windows 11 | ARM64 | Installer `.exe`, portable `.zip` |
 | macOS Preview, deployment target 14+ | Apple Silicon / arm64 | `.dmg` |
 | macOS Preview, deployment target 14+ | Intel / x64 | `.dmg` |
 
 Package names follow `Pebrel-v<version>-<system>-<architecture>`. Windows offers
 stable installers ending in `-setup.exe` and portable ZIPs. Linux and macOS are
-Preview builds, marked `-preview` before the extension. A legacy-named Windows
-installer is also supplied for older automatic-update clients.
+Preview builds, marked `-preview` before the extension. Historical releases before
+1.7.0 also included a legacy-named Windows installer for automatic-update compatibility.
 
 On Windows, run the installer or extract the ZIP and launch `pebrel.exe`, keeping
 the bundled directories together. On Linux, install the DEB or make the AppImage
 executable. On macOS, open the matching DMG and drag Pebrel into Applications.
 Ad-hoc-signed macOS builds may require **Open Anyway** in **System Settings >
-Privacy & Security** on first launch. Native macOS CI runs on macOS 15; the
+Privacy & Security** on first launch. Native macOS CI uses macOS 26 runners; the
 deployment target alone does not establish validation on every older OS version.
 
 Pebrel 2.1 connects native tray actions, quick-terminal shortcuts, login startup,
@@ -266,9 +296,9 @@ pebrel config init --language en-US
 pebrel config check
 ```
 
-The generated Lua configuration uses `require 'pebrel'` and
+The generated Luau configuration uses `require 'pebrel'` and
 `pebrel.config_builder()`. Invalid reloads retain the last valid configuration.
-See the [Lua configuration guide](docs/lua-configuration.md) for settings and examples.
+See the [Luau configuration guide](docs/lua-configuration.md) for settings and examples.
 
 In **Settings → Terminal → Alerts**, **Notification duration** selects **Use defaults**,
 5, 10, 30, or 90 seconds, or **Until dismissed**. The default preserves existing

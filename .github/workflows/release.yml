@@ -53,10 +53,13 @@ env:
 jobs:
   native-tests:
     if: ${{ !inputs.windows_only }}
+    needs: prepare
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/linux-lua.yml
+    with:
+      release_version: ${{ needs.prepare.outputs.version }}
 
   prepare:
     name: Validate stable release inputs
@@ -65,6 +68,7 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       asset_version: ${{ steps.metadata.outputs.asset_version }}
       include_android: ${{ steps.metadata.outputs.include_android }}
+      include_linux: ${{ steps.metadata.outputs.include_linux }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -104,9 +108,12 @@ jobs:
           ).strip()
           validate_notes(Path(f"docs/release-notes/v{version}.md"), version)
           validate_changelog(Path("CHANGELOG.md"), version)
-          include_android = any(name.endswith(".apk") for name in expected_asset_names(version))
+          names = expected_asset_names(version)
+          include_android = any(name.endswith(".apk") for name in names)
+          include_linux = any("-linux-" in name for name in names)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"include_android={str(include_android).lower()}\n")
+              output.write(f"include_linux={str(include_linux).lower()}\n")
           PY
           {
             echo "version=$version"
@@ -134,7 +141,7 @@ jobs:
 
   linux:
     name: Linux x86_64 stable package
-    if: ${{ !inputs.windows_only }}
+    if: ${{ !inputs.windows_only && needs.prepare.outputs.include_linux == 'true' }}
     needs: prepare
     runs-on: ubuntu-22.04
     timeout-minutes: 120
@@ -640,10 +647,12 @@ jobs:
 
   aggregate:
     name: Verify stable assets and upload complete set
-    # Optional Android skips must not propagate past verified desktop jobs.
+    # Excluded platform skips must not propagate past verified included jobs.
     if: >-
       ${{ !cancelled() && !inputs.windows_only &&
-          needs.prepare.result == 'success' && needs.linux.result == 'success' &&
+          needs.prepare.result == 'success' &&
+          ((needs.prepare.outputs.include_linux == 'true' && needs.linux.result == 'success') ||
+           (needs.prepare.outputs.include_linux == 'false' && needs.linux.result == 'skipped')) &&
           needs.macos.result == 'success' && needs.windows.result == 'success' &&
           needs.windows-arm64.result == 'success' &&
           ((needs.prepare.outputs.include_android == 'true' && needs.android.result == 'success') ||
@@ -653,6 +662,7 @@ jobs:
     env:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       INCLUDE_ANDROID: ${{ needs.prepare.outputs.include_android }}
+      INCLUDE_LINUX: ${{ needs.prepare.outputs.include_linux }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -676,7 +686,10 @@ jobs:
           import os
           from pathlib import Path
           from scripts.preview_release import validate_evidence
-          validate_evidence(Path("stable-evidence"), os.environ["SOURCE_COMMIT"], windows_arm64=True)
+          validate_evidence(
+              Path("stable-evidence"), os.environ["SOURCE_COMMIT"], windows_arm64=True,
+              include_linux=os.environ["INCLUDE_LINUX"] == "true",
+          )
           PY
           if [[ "$INCLUDE_ANDROID" == true ]]; then
             python3 scripts/android_release.py --version "$PACKAGE_VERSION" --commit "$SOURCE_COMMIT" \
@@ -711,7 +724,6 @@ jobs:
       contents: write
     env:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
-      INCLUDE_ANDROID: ${{ needs.prepare.outputs.include_android }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -752,14 +764,16 @@ jobs:
             echo "tag $tag already points to $existing_tag_commit, expected $GITHUB_SHA" >&2
             exit 1
           fi
-          android_assets=()
-          if [[ "$INCLUDE_ANDROID" == true ]]; then
-            android_assets=(release-dist/*.apk)
-          fi
+          python3 - <<'PY' >"$RUNNER_TEMP/stable-asset-paths.txt"
+          import os
+          from pathlib import Path
+          from scripts.stable_release import validate_assets
+          for path in validate_assets(Path("release-dist"), os.environ["PACKAGE_VERSION"]):
+              print(path)
+          PY
+          mapfile -t assets <"$RUNNER_TEMP/stable-asset-paths.txt"
           gh release create "$tag" \
-            release-dist/*.AppImage release-dist/*.deb release-dist/*.dmg \
-            release-dist/*.tar.gz release-dist/*.zip release-dist/*-setup.exe \
-            "${android_assets[@]}" release-dist/SHA256SUMS \
+            "${assets[@]}" release-dist/SHA256SUMS \
             --target "$GITHUB_SHA" --title "Pebrel $PACKAGE_VERSION" \
             --notes-file release-dist/RELEASE_NOTES.md
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >"$RUNNER_TEMP/stable-release.json"

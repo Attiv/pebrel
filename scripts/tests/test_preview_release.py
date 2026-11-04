@@ -178,29 +178,33 @@ class PreviewReleaseTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 validate_evidence(Path(directory), "a" * 40)
 
+    def write_evidence(self, root: Path) -> dict:
+        common_path = Path(__file__).resolve().parents[1] / "conformance/golden/common.json"
+        required = json.loads(common_path.read_text(encoding="utf-8"))["required"]
+        report = {"schema_version": 1, "build": {"commit": "a" * 40}}
+        for path, value in required.items():
+            cursor = report
+            parts = path.split(".")
+            for part in parts[:-1]:
+                cursor = cursor.setdefault(part, {})
+            cursor[parts[-1]] = value
+        report["cases"]["ssh_loop"] = {"status": "skipped", "reason": "no_interactive_ssh_automation"}
+        report["summary"].update(passed=9, skipped=1)
+        for filename, platform in RUNTIME_REPORTS.items():
+            report["platform"] = platform
+            (root / filename).write_text(json.dumps(report), encoding="utf-8")
+        for architecture in ("aarch64", "x86_64"):
+            (root / f"macos-{architecture}-launch.json").write_text(json.dumps({
+                "status": "passed", "commit": "a" * 40, "architecture": architecture,
+                "launch_method": "launchservices", "utf8_locale": True, "home_cwd": True,
+                "screenshot": "captured", "rendered_text": True,
+            }), encoding="utf-8")
+        return report
+
     def test_complete_evidence_requires_same_commit_and_installed_launch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            common_path = Path(__file__).resolve().parents[1] / "conformance/golden/common.json"
-            required = json.loads(common_path.read_text(encoding="utf-8"))["required"]
-            report = {"schema_version": 1, "build": {"commit": "a" * 40}}
-            for path, value in required.items():
-                cursor = report
-                parts = path.split(".")
-                for part in parts[:-1]:
-                    cursor = cursor.setdefault(part, {})
-                cursor[parts[-1]] = value
-            report["cases"]["ssh_loop"] = {"status": "skipped", "reason": "no_interactive_ssh_automation"}
-            report["summary"].update(passed=9, skipped=1)
-            for filename, platform in RUNTIME_REPORTS.items():
-                report["platform"] = platform
-                (root / filename).write_text(json.dumps(report), encoding="utf-8")
-            for architecture in ("aarch64", "x86_64"):
-                (root / f"macos-{architecture}-launch.json").write_text(json.dumps({
-                    "status": "passed", "commit": "a" * 40, "architecture": architecture,
-                    "launch_method": "launchservices", "utf8_locale": True, "home_cwd": True,
-                    "screenshot": "captured", "rendered_text": True,
-                }), encoding="utf-8")
+            report = self.write_evidence(root)
             validate_evidence(root, "a" * 40)
             with self.assertRaises(FileNotFoundError):
                 validate_evidence(root, "a" * 40, windows_arm64=True)
@@ -224,6 +228,35 @@ class PreviewReleaseTests(unittest.TestCase):
             (root / "macos-aarch64-launch.json").write_text('{}', encoding="utf-8")
             with self.assertRaisesRegex(ManifestError, "LaunchServices"):
                 validate_evidence(root, "a" * 40)
+
+    def test_windows_macos_evidence_still_requires_both_architectures_and_launch_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = self.write_evidence(root)
+            for filename, platform in RUNTIME_REPORTS.items():
+                if platform.startswith("linux-"):
+                    (root / filename).unlink()
+            report["platform"] = "windows-aarch64"
+            (root / "windows-arm64-report.json").write_text(json.dumps(report), encoding="utf-8")
+            validate_evidence(root, "a" * 40, windows_arm64=True, include_linux=False)
+            with self.assertRaises(FileNotFoundError):
+                validate_evidence(root, "a" * 40, windows_arm64=True)
+            with self.assertRaisesRegex(ManifestError, "source commit"):
+                validate_evidence(root, "b" * 40, windows_arm64=True, include_linux=False)
+            for name in ("windows-report.json", "windows-arm64-report.json", "macos-aarch64-report.json",
+                         "macos-x86_64-report.json", "macos-aarch64-launch.json", "macos-x86_64-launch.json"):
+                path = root / name
+                original = path.read_text(encoding="utf-8")
+                path.unlink()
+                with self.assertRaises(FileNotFoundError, msg=name):
+                    validate_evidence(root, "a" * 40, windows_arm64=True, include_linux=False)
+                path.write_text(original, encoding="utf-8")
+            arm = root / "windows-arm64-report.json"
+            report["summary"]["passed"] = 0
+            report["cases"]["ssh_loop"] = {"status": "failed"}
+            arm.write_text(json.dumps(report), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "failed or incomplete"):
+                validate_evidence(root, "a" * 40, windows_arm64=True, include_linux=False)
 
     def test_remote_release_checks_assets_notes_labels_and_tag_commit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

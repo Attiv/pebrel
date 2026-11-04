@@ -27,6 +27,7 @@ pub struct EventProxy {
     stages: UnboundedSender<crate::ssh_session::SshEvent>,
     remote_connection: Arc<std::sync::Mutex<Option<crate::ssh_session::PaneConnection>>>,
     resume_target: Arc<std::sync::Mutex<Option<crate::ssh_session::ResumeTarget>>>,
+    tmux_activity: Arc<std::sync::Mutex<Option<crate::ssh_session::TmuxActivity>>>,
 }
 
 impl EventListener for EventProxy {
@@ -51,11 +52,23 @@ impl crate::ssh_session::SshEventHost for EventProxy {
     }
     fn ssh_resume_target(&self, target: Option<crate::ssh_session::ResumeTarget>) {
         if let Ok(mut current) = self.resume_target.lock() {
+            if *current != target {
+                self.ssh_tmux_activity(None);
+            }
             *current = target;
         }
     }
     fn ssh_forward_warning(&self, warning: crate::ssh_session::ForwardWarning) {
         let _ = self.stages.unbounded_send(crate::ssh_session::SshEvent::ForwardWarning(warning));
+    }
+    fn ssh_tmux_activity(&self, activity: Option<crate::ssh_session::TmuxActivity>) {
+        if let Ok(mut current) = self.tmux_activity.lock() {
+            if current.is_none() && activity.is_none() {
+                return;
+            }
+            *current = activity;
+        }
+        self.send_event(Event::Wakeup);
     }
     fn ssh_stage(&self, stage: crate::ssh_session::SshStage) {
         let _ = self.stages.unbounded_send(crate::ssh_session::SshEvent::Stage(stage));
@@ -92,6 +105,7 @@ pub struct TerminalSession {
     pub shell_pid: u32,
     pub(super) remote_connection: Arc<std::sync::Mutex<Option<crate::ssh_session::PaneConnection>>>,
     pub(crate) resume_target: Arc<std::sync::Mutex<Option<crate::ssh_session::ResumeTarget>>>,
+    pub(super) tmux_activity: Arc<std::sync::Mutex<Option<crate::ssh_session::TmuxActivity>>>,
 }
 
 #[cfg(all(test, feature = "gpui-test-support"))]
@@ -115,6 +129,7 @@ pub(super) fn test_session_with_events() -> (
         stages,
         remote_connection: Default::default(),
         resume_target: Default::default(),
+        tmux_activity: Default::default(),
     };
     let term =
         Term::new(Config::default(), &GridSize { columns: 80, screen_lines: 24 }, proxy.clone());
@@ -127,6 +142,7 @@ pub(super) fn test_session_with_events() -> (
             shell_pid: 0,
             remote_connection: proxy.remote_connection.clone(),
             resume_target: proxy.resume_target.clone(),
+            tmux_activity: proxy.tmux_activity.clone(),
         },
         receiver,
         event_rx,
@@ -206,6 +222,7 @@ pub fn spawn(
         stages: stage_tx,
         remote_connection: Default::default(),
         resume_target: Default::default(),
+        tmux_activity: Default::default(),
     };
 
     let grid = GridSize {
@@ -239,6 +256,7 @@ pub fn spawn(
             shell_pid,
             remote_connection,
             resume_target: Default::default(),
+            tmux_activity: Default::default(),
         },
         rx,
         stage_rx,
@@ -259,6 +277,7 @@ pub fn spawn_serial(
         stages: stage_tx,
         remote_connection: Default::default(),
         resume_target: Default::default(),
+        tmux_activity: Default::default(),
     };
 
     let grid = GridSize {
@@ -278,6 +297,7 @@ pub fn spawn_serial(
             shell_pid: 0,
             remote_connection,
             resume_target: Default::default(),
+            tmux_activity: Default::default(),
         },
         rx,
         stage_rx,
@@ -302,6 +322,7 @@ pub fn spawn_ssh(
         stages: stage_tx,
         remote_connection: Default::default(),
         resume_target: Default::default(),
+        tmux_activity: Default::default(),
     };
 
     let grid = GridSize {
@@ -313,6 +334,7 @@ pub fn spawn_ssh(
     let remote_connection = proxy.remote_connection.clone();
     *proxy.resume_target.lock().unwrap() = resume_target.clone();
     let resume_state = proxy.resume_target.clone();
+    let tmux_activity = proxy.tmux_activity.clone();
     let sender = crate::ssh_session::spawn_session_resuming(
         destination,
         initial_remote_cwd,
@@ -330,6 +352,7 @@ pub fn spawn_ssh(
             shell_pid: 0,
             remote_connection,
             resume_target: resume_state,
+            tmux_activity,
         },
         rx,
         stage_rx,

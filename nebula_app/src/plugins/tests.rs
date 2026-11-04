@@ -59,7 +59,7 @@ fn resource_command_uses_native_result_without_a_lua_vm() {
     .unwrap();
     assert_eq!(execution.engine, "native");
     assert_eq!(execution.lua_memory_bytes, 0);
-    assert_eq!(execution.instruction_ticks, 0);
+    assert_eq!(execution.interrupt_count, 0);
     assert_eq!(lua::vm_creation_count(), initial_vms);
 }
 
@@ -203,6 +203,62 @@ fn denied_lua_call_inside_pcall_never_reaches_runtime() {
 }
 
 #[test]
+fn caught_denial_blocks_later_permitted_calls_only_in_the_same_invocation() {
+    let (_dir, denied_package) = package(
+        &lua_manifest(),
+        Some(
+            br#"
+        return {describe=function(ctx)
+            pcall(function() ctx.runtime.call('window.' .. 'close', {}) end)
+            pcall(function() ctx.runtime.call('runtime.describe', {}) end)
+            return true
+        end}
+    "#,
+        ),
+    );
+    let mut calls = 0;
+    let error =
+        execute(&denied_package, "describe", json!({}), Duration::from_secs(1), &mut |_, _, _| {
+            calls += 1;
+            Ok(Value::Null)
+        })
+        .unwrap_err();
+    assert_eq!(error.code, "permission_denied");
+    assert_eq!(calls, 0, "a caught denial must not authorize a later host request");
+
+    let (_dir, independent) = package(
+        &lua_manifest(),
+        Some(
+            b"return {describe=function(ctx) return ctx.runtime.call('runtime.describe', {}) end}",
+        ),
+    );
+    let execution = execute(
+        &independent,
+        "describe",
+        json!({}),
+        Duration::from_secs(1),
+        &mut |method, _, _| {
+            assert_eq!(method, "runtime.describe");
+            calls += 1;
+            Ok(json!({"independent":true}))
+        },
+    )
+    .unwrap();
+    assert_eq!(calls, 1);
+    assert_eq!(execution.result, json!({"independent":true}));
+}
+
+#[test]
+fn protected_invalid_runtime_method_keeps_its_request_error() {
+    for method in ["nil", "42", "{}"] {
+        let source = format!(
+            "return {{describe=function(ctx) pcall(function() ctx.runtime.call({method}, {{}}) end); return true end}}"
+        );
+        assert_eq!(run_lua(&source).unwrap_err().code, "invalid_runtime_request", "{method}");
+    }
+}
+
+#[test]
 fn native_error_receipts_survive_the_lua_boundary() {
     let (_dir, first_package) = package(
         &lua_manifest(),
@@ -242,15 +298,15 @@ fn native_error_receipts_survive_the_lua_boundary() {
 }
 
 #[test]
-fn instruction_yields_stop_loops_even_inside_pcall() {
+fn interrupt_limits_stop_loops_even_inside_pcall() {
     let error = run_lua("return {describe=function() while true do pcall(function() while true do end end) end end}").unwrap_err();
-    assert_eq!(error.code, "lua_instruction_limit");
+    assert_eq!(error.code, "luau_interrupt_limit");
 }
 
 #[test]
 fn source_initialization_is_budgeted_too() {
     let error = run_lua("while true do end").unwrap_err();
-    assert_eq!(error.code, "lua_instruction_limit");
+    assert_eq!(error.code, "luau_interrupt_limit");
 }
 
 #[test]
@@ -258,7 +314,7 @@ fn lua_memory_is_bounded() {
     let error =
         run_lua("return {describe=function() return string.rep('x', 32 * 1024 * 1024) end}")
             .unwrap_err();
-    assert_eq!(error.code, "lua_memory_limit");
+    assert_eq!(error.code, "luau_memory_limit");
 }
 
 #[test]

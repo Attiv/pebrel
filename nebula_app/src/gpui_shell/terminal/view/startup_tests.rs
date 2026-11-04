@@ -269,6 +269,8 @@ fn git_completion_real_repository_reaches_all_modes_and_preserves_quoted_edits(
 fn git_completion_rejects_previous_directory_and_remote_context(cx: &mut TestAppContext) {
     let repository = crate::git_completion::tests::repository();
     let other = tempfile::tempdir().unwrap();
+    // Temp roots may be inside the checkout; give the other cwd its own Git discovery boundary.
+    crate::git_completion::tests::git(other.path(), &["init", "-b", "unrelated"]);
     let (view, window, _) = open_at(cx, Some(repository.path().to_owned()));
     view.update(window, |view, cx| {
         view.exec_context = Some(crate::runtime_exec::PaneExecContext::from_pty_options(

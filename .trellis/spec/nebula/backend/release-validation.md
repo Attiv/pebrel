@@ -1,0 +1,53 @@
+# Native synchronization and release validation
+
+## 1. Scope / trigger
+
+Use for fork/upstream integration, stable platform scope, and native initialization caller changes. The authoritative current-release policy is architecture/notes/packaging/2026-11-03-fork-windows-macos-release-scope.md; asset lists remain owned by scripts/stable_release.py, not copied here.
+
+## 2. Signatures
+
+- stable_release.expected_asset_names(version: str) -> tuple[str, ...].
+- ci_plan.plan_matrices(event_name, payload, changed_paths=None, *, release_version="") -> (native_matrix, release_matrix).
+- preview_release.validate_evidence(directory, commit, *, windows_arm64=False, include_linux=True).
+- gpui_shell::init(cx: &mut App, startup_window: config::StartupWindow); test callers use existing StartupWindow::load(None), not the former Option<PathBuf> argument.
+- Settings line-level persistence lives in private nebula_settings/src/persistence.rs with unchanged root reexports; RawSettings values remain private.
+
+## 3. Contracts
+
+Stable prepare validates package version/tag and derives include_linux/include_android from expected_asset_names. The validated version passes through the reusable native workflow to the planner. Ordinary calls preserve the full matrix; the reviewed 2.4.0 fork exception selects Windows/macOS only. Required check names do not change.
+
+Every included native/package job must succeed for the same source; excluded Linux/Android jobs must be skipped. Windows ARM64 and both macOS conformance/LaunchServices receipts stay mandatory. Upload exact validated manifest paths; refuse existing mismatched tags/releases. Source notes and Changelog share supported pending hashes, replaced by real hashes only in rendered public notes.
+
+Local product tests need absolute matching PEBREL_CONFIG_DIR/NEBULA_CONFIG_DIR, isolated HOME/XDG where applicable and scrubbed runtime/config routing. Preserve pinned CARGO_HOME/RUSTUP_HOME. Python helpers need Python >=3.11; select the actual subprocess interpreter, not a shell alias. Mac GPUI builds require the official Metal Toolchain, verified with xcrun metal --version. CI uses the pinned nextest runner and .config/nextest.toml fixture scheduling; Cargo's same-process parallel runner does not apply those groups.
+
+## 4. Validation and error matrix
+
+| Condition | Required result |
+| --- | --- |
+| Ordinary call, no release version | Existing five-host matrix |
+| Matching 2.4.0 stable release | Manifest-selected four native hosts |
+| PR/schedule/merge-group narrowing or mismatched push tag | PlanError; no narrowed matrix |
+| Invalid scope, selected skip/failure/cancel, unexpected excluded execution | Aggregate/publication blocked |
+| Missing/wrong-source conformance or wrong public asset set/hash | Verification rejects |
+| Old init(cx, None) caller | Compile failure; synchronize every cfg caller |
+| Local interactive OS test cannot complete | Record unverified boundary; do not delete test or waive hosted full-native gate |
+
+## 5. Good / base / bad cases
+
+Good: matching tag/version and complete manifest-bound same-source Win/Mac evidence. Base: historical release/default native callers retain their old contracts. Bad: copying upstream packages/receipts, uploading nonexistent globs, treating untyped idle as success, or claiming mock Cargo lines prove a native build.
+
+## 6. Required tests
+
+Keep positive/negative assertions in test_stable_release, test_ci_plan, test_preview_release, test_android_release and test_pebrel_branding. Branding validates fork latest-download ownership and complete notes/Changelog hash equivalence, including missing/mismatched hash rejection. Compile all init callers including ignored/non-host cfg tests. Run source-preservation tests and actual applicable native suites; record commands, source and unrun hardware boundaries separately.
+
+## 7. Wrong vs correct
+
+Wrong: replace develop with upstream, pick ours/theirs wholesale, change budgets, delete failures or add compatibility wrappers just for stale tests.
+
+Correct: refresh own develop and the latest published upstream source, merge normally preserving both parents, reconcile domain contracts, and use the current initializer directly:
+
+```rust
+crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None));
+```
+
+Wrong: claim publication from a push or Actions artifact. Correct: verify triggered source/ref, then independently verify public title/tag/body/names/labels/sizes/digests after successful hosted publication.

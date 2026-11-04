@@ -206,7 +206,7 @@
     "search": {
       "terms": {
         "application": "application app update version github support",
-        "appearance": "appearance ligatures theme custom template import export font opacity background blur language shader wgsl terminal effects effect video gif cursor smooth motion icon dim inactive panes scrollback scrolling speed history ctrl wheel zoom",
+        "appearance": "appearance ligatures theme custom template import export font opacity background blur language shader wgsl terminal effects effect video gif cursor smooth motion icon dim inactive panes scrollback scrolling speed history ctrl wheel zoom glsl rounded terminal labels badges radius logs",
         "profiles": "profiles shell terminal completion command history clear startup environment refresh path ai message notifications toast alerts bell duration timeout persistent auto-dismiss",
         "providers": "providers provider ai api prediction prompt suggestions",
         "ssh": "ssh host remote connection",
@@ -865,6 +865,7 @@
     "edit_block": "Edit this paragraph",
     "right_sidebar": "Toggle right sidebar",
     "loading": "Loading file…",
+    "loading_progress": "Loading… {received} / {total}",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved",
@@ -1253,7 +1254,9 @@
     "choose_files": "Choose files to upload",
     "choose_upload_directory": "Choose a folder to upload",
     "choose_download_directory": "Choose the download folder",
-    "drag_hint": "Drop files here to upload; drag an item to File Explorer to download."
+    "drag_hint": "Drop files here to upload; drag an item to File Explorer to download.",
+    "completed": "Transfer completed",
+    "copied_items": "Copied {count} remote items"
   },
   "hosts": {
     "copied": "Created host copy: {name}",
@@ -1561,14 +1564,14 @@
     "shader_liquid_silk": "Liquid silk",
     "shader_wgsl": "Custom…",
     "shader_source": "Custom background effect",
-    "shader_source_description": "Choose a WGSL effect file, then enable it. Replacing the file updates an enabled effect; reload after editing.",
+    "shader_source_description": "Choose a WGSL/GLSL effect file, then enable it. Replacing the file updates an enabled effect; reload after editing.",
     "shader_choose": "Choose file",
     "shader_reload": "Reload",
     "shader_selecting": "Selecting…",
-    "shader_prompt": "Select a terminal background WGSL file",
-    "shader_failed": "The shader background failed; the underlying background is retained. Check WGSL syntax and the frame-parameter format, or choose another effect.",
+    "shader_prompt": "Select a terminal background WGSL/GLSL file",
+    "shader_failed": "The shader background failed; the underlying background is retained. Check WGSL/GLSL syntax and the frame-parameter format, or choose another effect.",
     "shader_unavailable": "Realtime shader backgrounds are not enabled in this build or on this platform.",
-    "shader_missing_source": "Choose a WGSL file before enabling the custom effect.",
+    "shader_missing_source": "Choose a WGSL/GLSL file before enabling the custom effect.",
     "shader_confirm": "Enable custom background effect?",
     "shader_confirm_description": "The selected local program will run on the GPU. Enable a file you trust; its runtime cost depends on its contents.",
     "shader_enable": "Enable",
@@ -1796,7 +1799,10 @@
     "reading": "Reading the remote directory…",
     "empty": "This directory is empty.",
     "error_retry": "{error} (click Reload in the top-right to retry)",
-    "busy_other": "Another host is transferring: {destination}"
+    "busy_other": "Another host is transferring: {destination}",
+    "items": "{count} items",
+    "selected_items": "{count} items selected",
+    "clear_selection": "Clear selection (Esc)"
   },
   "backup_flow": {
     "password_notice": "Pebrel keeps this password in memory only for the current run and never writes it to disk. You will be asked again for the first backup after restarting. If you forget it, existing backups cannot be unlocked.",
@@ -2049,11 +2055,11 @@
     "disable": "Disable",
     "reload": "Reload",
     "confirm": "Enable custom terminal effects?",
-    "confirm_description": "Run the listed WGSL files in order on terminal surfaces. Existing background settings are kept.",
-    "missing": "Choose a WGSL source first.",
+    "confirm_description": "Run the listed WGSL/GLSL files in order on terminal surfaces. Existing background settings are kept.",
+    "missing": "Choose a WGSL/GLSL source first.",
     "failed": "Terminal effect failed. Original terminal rendering is kept; check the source and reload.",
     "unsupported": "Terminal effects are not available for this window's graphics backend or build. Saved sources can still be removed and effects disabled.",
-    "prompt": "Add terminal effect WGSL files",
+    "prompt": "Add terminal effect WGSL/GLSL files",
     "animation": "Playback",
     "animation_description": "By default, play only in the current terminal to reduce background resource use.",
     "animation_off": "Static",
@@ -2063,7 +2069,7 @@
     "move_up": "Up",
     "move_down": "Down",
     "remove": "Remove",
-    "sources_invalid": "Choose at most eight WGSL files with paths supported by the settings format.",
+    "sources_invalid": "Choose at most eight WGSL/GLSL files with paths supported by the settings format.",
     "save_failed": "Could not save the effect list. Check that the settings location is writable, then try again.",
     "advanced": "Advanced effects",
     "advanced_active": "Advanced effects · Terminal effects enabled"

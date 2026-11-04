@@ -101,6 +101,10 @@ Pebrel（原名 Nebula）把本地 Shell、远程主机、文件和 AI 命令行
 - Windows 下可选择后台驻留，让关窗后的会话继续运行。进程退出后重新接续已保存的对话
   是另一项功能，需要 CLI 支持恢复，并且有可用的会话身份。
 - 智能补齐与历史补齐、自定义快捷键，以及集成的 Shell 提示符。
+- 在受支持的 Bash/Readline、Zsh/ZLE 和 PowerShell/PSReadLine 提示符中，点击移动光标，
+  拖选输入后删除，保留 Shell 原生编辑与撤销；不支持的键位模式和无法确认的布局仍使用终端选区。
+- 显示通过 Kitty 图形协议直接传输的未压缩 RGB/RGBA 图像，同时保留 OSC 1337 支持。
+  存储与传输有界；暂不支持 PNG 载荷、文件或共享内存传输、Unicode 占位符及动画。
 - 命令列表支持复选框多选和一次确认批量删除，无需再逐条确认。多选模式下不会执行
   命令，切换搜索或文件夹会清空选择。“选择当前列表”包含当前筛选下滚动区外的命令。
   “管理 → 删除全部命令”不受当前搜索或文件夹限制，会清除全部自定义命令及所有平台
@@ -150,7 +154,12 @@ WSL 发行版，以及 `cat` 读取带空格的文件名。使用内置 Powerlin
 - 主机页、启动器、命令面板和 Quick Jump 均可按名称、地址、分组、标签和备注搜索 SSH 主机。
   空格分隔的关键词需同时匹配，搜索不区分大小写；启动入口现与主机页使用相同的搜索字段。
 - 保存主机、读取 SSH 配置别名、设置代理与跳板，支持私钥和交互式认证，并验证主机密钥。
-- SFTP 文件浏览、上传下载、文件夹传输、进度显示与取消。
+- SFTP 文件浏览、上传下载、文件夹传输、进度显示与取消；支持 Ctrl/Shift 选择后批量下载，
+  悬停操作、远端复制粘贴及拖出下载。上传/下载快捷键要求远端文件列表获得焦点。
+- 加载期间预览远端 UTF-8 文档；完整校验后，可编辑并保存不超过 8 MiB 的文本，保留 BOM
+  与换行格式。无效或超限文本保持只读，服务端文件变化时拒绝冲突保存。
+- 双击远端 PNG、JPEG、WebP、BMP 或 GIF 文件预览图片，提供进度、取消与重试；GIF 使用首帧。
+  图片源文件上限为 64 MiB，解码帧上限为 128 MiB。
 - 在终端旁浏览本地文件并执行 Git 操作。
 - 复制 WSL 与 SSH 标签时保留已知工作目录。
 
@@ -161,6 +170,13 @@ WSL 发行版，以及 `cat` 读取带空格的文件名。使用内置 Powerlin
 ### AI CLI 工作流
 
 - Claude Code、Codex 等可识别的 CLI 显示各自图标与活动状态；受支持的 hook 事件提供更准确的进度和待处理信号。
+- 任务名称去除重复的 CLI 转圈与进度装饰；明确上报的运行、权限/输入请求和完成事件保留
+  对应状态指示。完整 hook 生命周期不会被静默时间或屏幕猜测覆盖。
+- 受支持的 SSH 持久会话重新挂接 Agent hook，并跟随活动窗格的任务身份。需要已安装 Python
+  集成且能够确认 POSIX 客户端身份；暂不覆盖嵌套服务会话与非 POSIX 主机。
+- 对通过 Pebrel 本地启动或恢复的受支持 Claude Code、Pi 和 OpenCode 会话，可在输入为空时
+  基于近期对话提供下一条消息建议。预测默认关闭，可单独使用服务商/模型，不改变 Agent 主模型，
+  适配器随应用提供。
 - 通知跟随来源窗格，点击即可返回对应终端。
 - 已捕获的 Claude Code 与 Codex 回答可在阅读器中打开，支持 Markdown、公式、原文和本地图片预览。
   阅读器控件与提示随所选语言显示；复制原文保留完整回答。详见[阅读器语言说明](docs/answer-reader-language.md)。
@@ -177,7 +193,12 @@ WSL 发行版，以及 `cat` 读取带空格的文件名。使用内置 Powerlin
 - 应用图标配色与十一种界面语言，未翻译内容回退英文。
 - 工作区对话框、命令操作反馈、Git/SVN 控件与默认通知随所选语言显示；切换语言保留
   命令搜索内容与选区。详见[多语言说明](docs/internationalization.md)。
-- 可搜索的设置、命令面板，以及支持检查和热重载的 Lua 配置；已有 TOML 配置仍可使用。
+- 可搜索的设置、命令面板，以及支持检查和热重载的 Luau 配置；兼容旧 `.lua` 文件名，
+  但使用 Luau 的语法和标准库，不保证 Lua 5.4 全量兼容。已有 TOML 配置仍可使用。
+- 在 `pebrel.luau` 中配置原生字体、标签/侧栏、不透明度与窗格默认值；设置界面已保存的值
+  优先，修改脚本后需重启生效。
+- 使用 GLSL（`.glsl`/`.frag`）或 WGSL 背景/终端效果，并配置动画速度、帧率与数值参数。
+  效果需要显式启用，终端 shader 按列表顺序运行。
 - Markdown 文档标签与原生数学公式排版，不依赖 WebView。
 
 <p align="center">
@@ -190,23 +211,23 @@ WSL 发行版，以及 `cat` 读取带空格的文件名。使用内置 Powerlin
 
 ## 下载
 
-从 **[最新发布](https://github.com/Kuddev/pebrel/releases/latest)** 选择对应安装包。
+从 **[最新发布](https://github.com/Attiv/pebrel/releases/latest)** 选择对应安装包。本 fork 的 2.4.0 只发布 Windows 与 macOS 包。
 
 | 系统 | 架构 | 安装包 |
 | --- | --- | --- |
 | Windows 10 1809+ / 11 | x64 | `.exe` 安装器、`.zip` 便携包 |
-| Linux Preview，glibc 2.35+ | x64 | `.AppImage`、`.deb`、`.tar.gz` 便携包 |
+| Windows 11 | ARM64 | 安装器 `.exe`、便携 `.zip` |
 | macOS Preview，部署目标为 14+ | Apple Silicon / arm64 | `.dmg` |
 | macOS Preview，部署目标为 14+ | Intel / x64 | `.dmg` |
 
 安装包统一采用 `Pebrel-v<版本>-<系统>-<架构>` 命名，Windows 安装器以 `-setup.exe` 结尾。
 Windows 为正式版，Linux 与 macOS 文件名在扩展名前带有 `-preview` 标记。
-同时提供旧名称的兼容安装器，供旧版自动更新客户端使用。
+1.7.0 以前的历史发布还包含旧名称安装器，用于兼容旧版自动更新客户端。
 
 Windows 可运行安装器，或解压 ZIP 后启动 `pebrel.exe`，保留随包目录结构。
 Linux 可安装 DEB，或为 AppImage 添加执行权限。macOS 打开对应 DMG，把 Pebrel 拖入“应用程序”。
 采用临时签名的 macOS 包首次启动可能需要在“系统设置 > 隐私与安全性”中选择“仍要打开”。
-原生 macOS CI 运行在 macOS 15 上，部署目标并不代表每个较早系统版本都已通过运行验证。
+原生 macOS CI 使用 macOS 26 runner，部署目标并不代表每个较早系统版本都已通过运行验证。
 
 Pebrel 2.1 在 Windows、macOS 和 Linux 上接通原生托盘操作、快速终端快捷键、登录自启和
 本地 AI Hook 配置。Linux 托盘使用状态通知器，Wayland 快捷键使用桌面 Portal。
@@ -234,8 +255,8 @@ pebrel config init --language zh-CN
 pebrel config check
 ```
 
-生成的 Lua 配置使用 `require 'pebrel'` 与 `pebrel.config_builder()`。
-重载失败时继续使用上一份有效配置。设置与示例见 [Lua 配置指南](docs/lua-configuration.md)。
+生成的 Luau 配置使用 `require 'pebrel'` 与 `pebrel.config_builder()`。
+重载失败时继续使用上一份有效配置。设置与示例见 [Luau 配置指南](docs/lua-configuration.md)。
 
 在 **设置 → 终端 → 提醒** 中，**通知显示时长** 可选择 **保留原有时长**、
 5、10、30、90 秒，或 **保持常驻**。默认保留已有行为：短提示显示 5 秒，消息

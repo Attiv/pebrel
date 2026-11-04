@@ -161,8 +161,27 @@ def plan_matrices(
     event_name: str,
     payload: dict[str, Any],
     changed_paths: Sequence[str] | None = None,
+    *, release_version: str = "",
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Return native and release matrices for one validated event."""
+
+    if release_version:
+        if event_name not in {"push", "workflow_dispatch", "workflow_call"}:
+            raise PlanError("release scope is only valid for a stable release caller")
+        if event_name == "push" and payload.get("ref") != f"refs/tags/v{release_version}":
+            raise PlanError("release scope requires its matching stable tag")
+        if __package__:
+            from scripts.stable_release import StableReleaseError, expected_asset_names
+        else:
+            from stable_release import StableReleaseError, expected_asset_names
+        try:
+            names = expected_asset_names(release_version)
+        except StableReleaseError as error:
+            raise PlanError(str(error)) from error
+        selected = {platform.runner for platform in PLATFORMS}
+        if not any("-linux-" in name for name in names):
+            selected.remove("ubuntu-24.04")
+        return _matrices(selected)
 
     if event_name == "pull_request":
         pull_request = payload.get("pull_request")
@@ -216,6 +235,7 @@ def _arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--event-name", required=True)
     parser.add_argument("--event-path", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--release-version", default="")
     return parser.parse_args(argv)
 
 
@@ -223,7 +243,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = _arguments(argv)
     try:
         payload = _read_event(arguments.event_path)
-        native_matrix, release_matrix = plan_matrices(arguments.event_name, payload)
+        native_matrix, release_matrix = plan_matrices(
+            arguments.event_name, payload, release_version=arguments.release_version,
+        )
         write_outputs(arguments.output, native_matrix, release_matrix)
     except PlanError as exc:
         print(f"ci_plan: {exc}", file=sys.stderr)

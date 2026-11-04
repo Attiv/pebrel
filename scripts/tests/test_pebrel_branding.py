@@ -136,21 +136,57 @@ class PebrelBrandingTests(unittest.TestCase):
         readme = self.source("README.md")
         self.assertIn('<h1 align="center">Pebrel</h1>', readme)
         self.assertIn("Pebrel (formerly Nebula)", readme)
-        self.assertIn("https://github.com/Kuddev/pebrel/releases", readme)
+        for path in ("README.md", "README.zh-CN.md"):
+            with self.subTest(path=path):
+                self.assert_fork_download(self.source(path))
         self.assertNotIn("Local branding preview", readme)
         self.assertNotIn("本地品牌预览", readme)
         self.assertNotIn("A name change does not create a new published release", readme)
 
+    def assert_fork_download(self, readme):
+        self.assertIn("https://github.com/Attiv/pebrel/releases/latest", readme)
+        self.assertNotIn("https://github.com/Kuddev/pebrel/releases/latest", readme)
+
+    def test_fork_download_rejects_an_upstream_latest_link(self):
+        readme = self.source("README.md")
+        for wrong in (
+            readme.replace("Attiv/pebrel/releases/latest", "Kuddev/pebrel/releases/latest"),
+            readme + "\nhttps://github.com/Kuddev/pebrel/releases/latest\n",
+        ):
+            with self.subTest(readme=wrong[-100:]):
+                with self.assertRaises(AssertionError):
+                    self.assert_fork_download(wrong)
+
     def test_current_changelog_matches_bilingual_release_notes(self):
         version = self.manifest("nebula_app/Cargo.toml")["package"]["version"]
         notes = self.source(f"docs/release-notes/v{version}.md")
+        self.assert_release_documents(notes, self.source("CHANGELOG.md"), version)
+
+    def assert_release_documents(self, notes, changelog, version):
         self.assertTrue(notes.startswith(f"# Pebrel {version}\n"))
-        body = notes.split("## English\n", 1)[1].split("## SHA256", 1)[0]
+        body = notes.split("## English\n", 1)[1]
         expected = re.sub(r"^##(?=#* )", "###", "## English\n" + body, flags=re.MULTILINE)
-        changelog = self.source("CHANGELOG.md")
         entry = changelog.split(f"## {version} -", 1)[1].split("\n## ", 1)[0]
         actual = "### English\n" + entry.split("### English\n", 1)[1]
         self.assertEqual(actual.strip(), expected.strip())
+
+    def test_current_release_documents_reject_missing_or_different_checksums(self):
+        version = self.manifest("nebula_app/Cargo.toml")["package"]["version"]
+        notes = self.source(f"docs/release-notes/v{version}.md")
+        changelog = self.source("CHANGELOG.md")
+        match = re.search(r"(`[^`]+`:\s*`)(PENDING FINAL BUILD|[0-9a-fA-F]{64})`", notes)
+        self.assertIsNotNone(match)
+        checksum = match.group(0)
+        prefix, digest = match.groups()
+        changed = prefix + ("0" * 64 if digest != "0" * 64 else "f" * 64) + "`"
+        for case, wrong in (
+            ("missing", changelog.replace(checksum, "", 1)),
+            ("different", changelog.replace(checksum, changed, 1)),
+        ):
+            with self.subTest(case=case):
+                self.assertNotEqual(wrong, changelog)
+                with self.assertRaises(AssertionError):
+                    self.assert_release_documents(notes, wrong, version)
 
 
 if __name__ == "__main__":

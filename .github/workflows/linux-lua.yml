@@ -8,6 +8,11 @@ on:
         type: string
         default: ""
   workflow_call:
+    inputs:
+      release_version:
+        description: Validated stable version whose manifest selects release hosts
+        type: string
+        default: ""
   schedule:
     - cron: "23 19 * * *"
   push:
@@ -74,14 +79,17 @@ jobs:
       - name: Plan native validation
         id: matrix
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           python scripts/ci_plan.py \
             --event-name "$GITHUB_EVENT_NAME" \
             --event-path "$GITHUB_EVENT_PATH" \
-            --output "$GITHUB_OUTPUT"
+            --output "$GITHUB_OUTPUT" \
+            --release-version "$RELEASE_VERSION"
 
   # The required lint job validates the matrix before heavy runners are
-  # requested. Main, scheduled and release/manual callers retain the full matrix.
+  # requested. Ordinary callers retain the full matrix; stable releases use their manifest.
   native-tests:
     needs: lint
     if: ${{ inputs.windows_diagnostics_run == '' && needs.lint.outputs.native_matrix != '[]' }}

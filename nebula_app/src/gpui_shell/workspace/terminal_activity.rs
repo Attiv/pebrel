@@ -214,7 +214,7 @@ mod tests {
     ) -> (Entity<NebulaWorkspace>, Vec<Entity<TerminalView>>, Vec<Receiver<Msg>>, VisualTestContext)
     {
         cx.update(|cx| {
-            crate::gpui_shell::init(cx, None);
+            crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None));
             windowing::initialize(cx, crate::runtime_api::RuntimeHub::new());
             cx.set_reduce_motion(true);
             snapshot_probe::enable(cx);
@@ -638,7 +638,7 @@ mod tests {
     ) {
         cx.update(|cx| {
             gpui_component::init(cx);
-            crate::gpui_shell::init(cx, None);
+            crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None));
             windowing::initialize(cx, crate::runtime_api::RuntimeHub::new());
             cx.set_reduce_motion(true);
         });
@@ -743,7 +743,7 @@ mod tests {
         let _settings_lock = crate::gpui_shell::settings_fixture::lock_theme_studio();
         cx.update(|cx| {
             gpui_component::init(cx);
-            crate::gpui_shell::init(cx, None);
+            crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None));
             windowing::initialize(cx, crate::runtime_api::RuntimeHub::new());
             cx.set_reduce_motion(true);
             cx.update_global::<crate::gpui_shell::config::Settings, _>(|settings, _| {

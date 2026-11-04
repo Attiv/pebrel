@@ -14,6 +14,7 @@ from mobile.tools import build_ghostty as ghostty
 from mobile.tools.build_ghostty import build_environment
 from scripts import android_release as android
 from scripts.preview_release import sha256
+from scripts.stable_release import expected_asset_names
 
 
 class GhosttyBuildEnvironmentTests(unittest.TestCase):
@@ -226,9 +227,13 @@ class AndroidReleaseTests(unittest.TestCase):
         android_job = workflow.split("\n  android:\n", 1)[1].split("\n  aggregate:\n", 1)[0]
         self.assertIn("needs.prepare.outputs.include_android == 'true'", android_job)
         self.assertIn("needs: [prepare, linux, macos, windows, windows-arm64, android]", workflow)
-        self.assertIn("release-dist/*.apk", workflow)
-        self.assertIn("android_assets=()", workflow)
-        self.assertIn('"${android_assets[@]}" release-dist/SHA256SUMS', workflow)
+        publish = workflow.split("\n  publish:\n", 1)[1]
+        self.assertIn('validate_assets(Path("release-dist"), os.environ["PACKAGE_VERSION"])', publish)
+        self.assertIn('"${assets[@]}" release-dist/SHA256SUMS', publish)
+        self.assertIn(android.asset_name("2.3.2"), expected_asset_names("2.3.2"))
+        self.assertFalse(any(name.endswith(".apk") for name in expected_asset_names("2.4.0")))
+        self.assertIn('mapfile -t assets <"$RUNNER_TEMP/stable-asset-paths.txt"', publish)
+        self.assertIn("needs.prepare.outputs.include_android == 'false' && needs.android.result == 'skipped'", workflow)
         for required in (":app:testDebugUnitTest", ":app:lintPreview", ":app:assemblePreview",
                          ":app:connectedPreviewAndroidTest", "--commit", "stable-package-android",
                          "stable-evidence-android", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"):

@@ -531,6 +531,12 @@ fn localized_search_routes_and_filters_shortcut_rows(cx: &mut gpui::TestAppConte
 
     // Searching from Keymap must keep matching actions visible even when the
     // same word also names an Interaction setting. Other settings still route.
+    let copy_row = crate::display::keymap::EDITABLE_ACTIONS
+        .iter()
+        .position(|(action, ..)| *action == crate::config::Action::Copy)
+        .unwrap()
+        + 1;
+    let copy_selector = format!("settings-keymap-row-{copy_row}");
     cx.update(|_, cx| pane.update(cx, |pane, _| pane.active_section = 7));
     for (query, section) in
         [("コピー", 7), ("COPY", 7), ("复制", 7), ("プロキシ", 5), ("コピー", 7), ("", 7)]
@@ -548,7 +554,9 @@ fn localized_search_routes_and_filters_shortcut_rows(cx: &mut gpui::TestAppConte
         });
         assert_eq!(pane.read_with(cx, |pane, _| pane.active_section), section, "{query}");
         if section == 7 && !query.is_empty() {
-            assert!(cx.debug_bounds("settings-keymap-row-24").is_some());
+            assert!(
+                cx.update(|window, _| window.debug_bounds_for_selector(&copy_selector)).is_some()
+            );
             assert!(cx.debug_bounds("settings-keymap-row-4").is_none());
         }
     }
@@ -655,9 +663,12 @@ fn ctrl_wheel_font_zoom_setting_is_searchable_and_has_a_visible_switch(
 }
 
 #[test]
-fn settings_nav_exposes_prediction_providers_without_changing_stable_routes() {
+fn settings_nav_hides_providers_without_changing_stable_routes() {
     let visibility: Vec<_> = (0..SECTION_IDS.len()).map(is_nav_section_visible).collect();
-    assert_eq!(visibility, vec![true; SECTION_IDS.len()]);
+    assert_eq!(
+        visibility,
+        vec![true, true, true, false, true, true, true, true, true, true, true, true]
+    );
     assert!(!is_nav_section_visible(SECTION_IDS.len()));
     assert!(!is_nav_section_visible(usize::MAX));
     assert_eq!(
@@ -679,10 +690,49 @@ fn settings_nav_exposes_prediction_providers_without_changing_stable_routes() {
     );
 }
 
+#[cfg(feature = "gpui-test-support")]
+#[gpui::test]
+fn hidden_provider_navigation_keeps_prediction_search_reachable(cx: &mut gpui::TestAppContext) {
+    cx.update(|cx| {
+        gpui_component::init(cx);
+        cx.set_global(crate::gpui_shell::config::Settings::load(ThemeName::Nord));
+    });
+    let mut pane = None;
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let view = cx.new(|cx| SettingsPane::new(window, cx));
+        pane = Some(view.clone());
+        gpui_component::Root::new(view, window, cx)
+    });
+    let pane = pane.unwrap();
+    cx.simulate_resize(gpui::size(px(1200.0), px(900.0)));
+    cx.update(|window, cx| {
+        let _ = window.draw(cx);
+    });
+    assert!(cx.debug_bounds("settings-nav-3").is_none());
+    let origin = pane.read_with(cx, |pane, _| pane.active_section);
+    for (query, visible) in [("prediction", true), ("", false)] {
+        cx.update(|window, cx| {
+            pane.update(cx, |pane, cx| {
+                pane.settings_search_input
+                    .update(cx, |input, cx| input.replace_all(query, window, cx));
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(cx.debug_bounds("settings-nav-3").is_some(), visible);
+        assert_eq!(
+            pane.read_with(cx, |pane, _| pane.active_section),
+            if visible { 3 } else { origin }
+        );
+    }
+}
+
 #[test]
 fn settings_nav_starts_with_application_then_frequent_options() {
     let visible: Vec<_> = visible_nav_sections().collect();
-    assert_eq!(visible, vec![0, 1, 2, 10, 6, 7, 3, 4, 5, 11, 8, 9]);
+    assert_eq!(visible, vec![0, 1, 2, 10, 6, 7, 4, 5, 11, 8, 9]);
     let zh_labels: Vec<_> = visible
         .iter()
         .map(|index| section_label(*index, crate::display::UiLanguage::ZhCn))
@@ -696,7 +746,6 @@ fn settings_nav_starts_with_application_then_frequent_options() {
             "Agents",
             "交互",
             "按键映射",
-            "API 供应商",
             "SSH",
             "网络",
             "手机远程",
@@ -717,7 +766,6 @@ fn settings_nav_starts_with_application_then_frequent_options() {
             "Agents",
             "Interaction",
             "Key Bindings",
-            "API Providers",
             "SSH",
             "Network",
             "Phone Remote",

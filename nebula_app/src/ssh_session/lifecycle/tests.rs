@@ -95,6 +95,7 @@ enum Mode {
 
 struct Loopback {
     mode: Mode,
+    integration_channel: Arc<Mutex<Option<ChannelId>>>,
     forward_requests: Arc<std::sync::atomic::AtomicUsize>,
     forward_handles: mpsc::UnboundedSender<server::Handle>,
     hang: bool,
@@ -206,6 +207,7 @@ impl server::Handler for Loopback {
         if command.starts_with(b"sh -c ")
             && matches!(self.mode, Mode::Integration | Mode::RejectIntegration)
         {
+            *self.integration_channel.lock().unwrap() = Some(channel);
             self.data.send(b"bootstrap".to_vec()).unwrap();
             if self.mode == Mode::RejectIntegration {
                 return session.channel_failure(channel);
@@ -444,6 +446,7 @@ impl server::Handler for Loopback {
                 "pebrel-hook",
                 "bridge.py",
                 "shell.py",
+                "remote_tmux.py",
                 "bashrc",
                 ".zshenv",
                 ".zprofile",
@@ -461,6 +464,13 @@ impl server::Handler for Loopback {
         } else {
             assert!(
                 request["files"].as_array().unwrap().iter().any(|file| file["name"] == "shell.py")
+            );
+            assert!(
+                request["files"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|file| file["name"] == "remote_tmux.py")
             );
             json!({"version":1,"applied":true})
         };
@@ -627,6 +637,7 @@ fn duplicate_ssh_directory_preserves_literal_paths_and_rejects_control_character
 }
 
 struct Fixture {
+    integration_channel: Arc<Mutex<Option<ChannelId>>>,
     forward_requests: Arc<std::sync::atomic::AtomicUsize>,
     forward_handles: mpsc::UnboundedReceiver<server::Handle>,
     route: ResolvedRoute,
@@ -668,6 +679,8 @@ impl Fixture {
         let (window_changes_tx, window_changes) = mpsc::unbounded_channel();
         let forward_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let requests = forward_requests.clone();
+        let integration_channel = Arc::new(Mutex::new(None));
+        let started_channel = integration_channel.clone();
         let (forward_handles_tx, forward_handles) = mpsc::unbounded_channel();
         let task = tokio::spawn(async move {
             let mut connections = tokio::task::JoinSet::new();
@@ -677,6 +690,7 @@ impl Fixture {
                 stream.set_nodelay(true).unwrap();
                 let handler = Loopback {
                     mode,
+                    integration_channel: started_channel.clone(),
                     forward_requests: requests.clone(),
                     forward_handles: forward_handles_tx.clone(),
                     hang: first && mode == Mode::HangFirstConnection,
@@ -702,6 +716,7 @@ impl Fixture {
             known_hosts_path: Some(known_hosts),
         };
         Self {
+            integration_channel,
             route,
             data,
             window_changes,
@@ -730,6 +745,11 @@ fn integration_exec_routes_only_the_current_channel_token_without_accept_env() {
         let terminal = terminal(&events);
         let (mut channel, token) =
             open_shell(&acquired, size(), None, None, &events).await.unwrap();
+        assert_eq!(
+            Some(channel.id()),
+            *fixture.integration_channel.lock().unwrap(),
+            "accepted integration must keep its authenticated shell channel",
+        );
         for expected in [b"snapshot".as_slice(), b"apply", b"bootstrap"] {
             assert_eq!(fixture.data.recv().await.unwrap(), expected);
         }
@@ -754,6 +774,9 @@ fn rejected_integration_exec_falls_back_to_a_fresh_ordinary_shell_channel() {
             open_shell(&acquired, size(), Some("/requested"), None, &Events::default())
                 .await
                 .unwrap();
+        let rejected =
+            fixture.integration_channel.lock().unwrap().expect("integration was attempted");
+        assert_ne!(channel.id(), rejected, "rejected exec requires a fresh shell channel");
         for expected in [b"snapshot".as_slice(), b"apply", b"bootstrap", b"cd '/requested'\r"] {
             assert_eq!(fixture.data.recv().await.unwrap(), expected);
         }

@@ -22,12 +22,18 @@ pub struct NebulaSwitch {
     key: SharedString,
     checked: bool,
     disabled: bool,
+    small: bool,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
 impl NebulaSwitch {
     pub fn new(key: impl Into<SharedString>) -> Self {
-        Self { key: key.into(), checked: false, disabled: false, on_click: None }
+        Self { key: key.into(), checked: false, disabled: false, small: false, on_click: None }
+    }
+
+    pub fn small(mut self) -> Self {
+        self.small = true;
+        self
     }
 
     pub fn checked(mut self, checked: bool) -> Self {
@@ -81,10 +87,11 @@ impl RenderOnce for NebulaSwitch {
         let muted = cx.theme().muted_foreground;
         let white = gpui::hsla(0.0, 0.0, 1.0, 1.0);
         let checked = self.checked;
+        let small = self.small;
         let group = SharedString::from(format!("switch-hit-{}", self.key));
         let track = div()
-            .w(px(40.0))
-            .h(px(22.0))
+            .w(px(if small { 28.0 } else { 40.0 }))
+            .h(px(if small { 16.0 } else { 22.0 }))
             .relative()
             .flex_shrink_0()
             .rounded(px(11.0))
@@ -101,9 +108,9 @@ impl RenderOnce for NebulaSwitch {
                 .child(
                     div()
                         .absolute()
-                        .left(px(4.0))
-                        .top(px(4.0))
-                        .size(px(12.0))
+                        .left(px(if small { 3.0 } else { 4.0 }))
+                        .top(px(if small { 3.0 } else { 4.0 }))
+                        .size(px(if small { 10.0 } else { 12.0 }))
                         .rounded_full()
                         .bg(muted)
                         .opacity(1.0 - t),
@@ -111,9 +118,9 @@ impl RenderOnce for NebulaSwitch {
                 .child(
                     div()
                         .absolute()
-                        .left(px(20.0))
-                        .top(px(2.0))
-                        .size(px(16.0))
+                        .left(px(if small { 15.0 } else { 20.0 }))
+                        .top(px(if small { 3.0 } else { 2.0 }))
+                        .size(px(if small { 10.0 } else { 16.0 }))
                         .rounded_full()
                         .bg(white)
                         .opacity(t),
@@ -142,7 +149,7 @@ impl RenderOnce for NebulaSwitch {
             .toggled(checked)
             .disabled(self.disabled)
             .custom(ButtonCustomVariant::new(cx))
-            .w(px(44.0))
+            .w(px(if small { 32.0 } else { 44.0 }))
             .h(px(32.0))
             .px_0()
             .rounded(px(6.0))
