@@ -51,3 +51,41 @@ crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None)
 ```
 
 Wrong: claim publication from a push or Actions artifact. Correct: verify triggered source/ref, then independently verify public title/tag/body/names/labels/sizes/digests after successful hosted publication.
+
+## Scenario: nonblocking Windows keyboard fixture writes
+
+### 1. Scope / trigger
+
+Use when a test writes directly to the Windows PTY adapter. The reviewed incident and alternatives are in `architecture/notes/nebula_app/platform/keyboard/2026-11-04-nonblocking-conpty-fixture-writes.md`.
+
+### 2. Signatures
+
+- `UnblockedWriter::is_closed(&self) -> bool` is a read-only piper closure query; production `Write` and event-loop behavior are unchanged.
+- Private `write_progress::advance(input: &[u8], written: io::Result<usize>, closed: bool, deadline: Instant) -> io::Result<&[u8]>` returns the unwritten suffix.
+
+### 3. Contracts
+
+Piper Pending maps to zero, including fairness yields on an open, nonfull pipe. Ready receipts establish reader setup, not writer readiness. The native fixture advances only accepted bytes, drains conout, checks fixture error/child exit and retains its ten-second deadline. A result receipt is read before rejecting normal child exit. No input encoding, mode, reader assertion or owned-PTY cleanup changes.
+
+### 4. Validation & error matrix
+
+| Condition | Required result |
+| --- | --- |
+| Open zero / Interrupted / WouldBlock | Same pending suffix; bounded retry |
+| Partial accepted write | Advance exactly by accepted bytes; no replay |
+| Closed zero or incomplete input | WriteZero; no retry |
+| Real WriteZero / BrokenPipe / other error | Propagate failure |
+| Impossible write count / expired deadline | InvalidData / TimedOut |
+| Fixture error / premature child exit | Immediate failure with context |
+
+### 5. Good / base / bad cases
+
+Good: pending open writes complete once and produce exact native/byte results. Base: existing production polling retains pending bytes. Bad: retrying `write_all` from byte zero, sleeping before an assumed-blocking write, or masking closed-pipe failures.
+
+### 6. Tests required
+
+Run the real-piper open-yield/closed regression and progress partial/transient/closed/error/count/deadline tests. Preserve all four scenarios in `modified_enter_reaches_native_and_byte_readers_through_conpty`. Portable actual-source checks cannot replace both hosted Windows native suites or establish the hidden pipe state of a previous failure.
+
+### 7. Wrong vs correct
+
+Wrong: `pty.writer().write_all(&input).unwrap()` on the Pending-to-zero adapter. Correct: the test-owned finite progress loop, with read-only closure evidence and exact remaining bytes. Never weaken the Release gate to make a fixture pass.

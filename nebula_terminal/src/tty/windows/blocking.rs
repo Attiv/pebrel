@@ -286,6 +286,11 @@ impl<W: Write + Send + 'static> UnblockedWriter<W> {
             Poll::Ready(n) => n,
         }
     }
+
+    /// A pending poll can also return zero; only this state proves the receiver stopped.
+    pub fn is_closed(&self) -> bool {
+        self.pipe.is_closed()
+    }
 }
 
 impl<W: Write + Send + 'static> Write for UnblockedWriter<W> {
@@ -345,6 +350,30 @@ mod tests {
     use polling::Events;
 
     use super::*;
+
+    #[test]
+    fn writer_distinguishes_open_fairness_yield_from_closed_pipe() {
+        let (mut reader, pipe) = pipe(1);
+        let mut writer = UnblockedWriter::<io::Sink> {
+            interest: Arc::new(Registration { interest: Mutex::new(None), end: PipeEnd::Writer }),
+            pipe,
+            _reader: PhantomData,
+        };
+        let mut yielded = false;
+        for _ in 0..10_000 {
+            if writer.write(b"x").unwrap() == 0 {
+                assert!(!writer.is_closed());
+                assert!(!writer.pipe.is_full());
+                yielded = true;
+                break;
+            }
+            assert_eq!(reader.try_drain(&mut [0; 1]), 1);
+        }
+        assert!(yielded, "locked piper fairness did not yield within the bounded probe");
+        drop(reader);
+        assert!(writer.is_closed());
+        assert_eq!(writer.write_all(b"x").unwrap_err().kind(), io::ErrorKind::WriteZero);
+    }
 
     /// 「给一批就静默」的源：`recv` 阻塞住读线程，精确复刻 AI CLI 打完一轮
     /// 就不再输出的时序。源不静默的话总有下一次写入替我们投递事件，缺唤醒

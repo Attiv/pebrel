@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use nebula_terminal::event::WindowSize;
 use nebula_terminal::term::TermMode;
-use nebula_terminal::tty::{self, EventedReadWrite};
+use nebula_terminal::tty::{self, EventedPty, EventedReadWrite};
 use windows_sys::Win32::Storage::FileSystem::ReadFile;
 use windows_sys::Win32::System::Console::*;
 
@@ -15,6 +15,8 @@ use crate::input::terminal_input::build_runtime_sequence_for_program;
 use crate::runtime_api::{RuntimeKey, RuntimeKeyModifiers};
 
 const FIXTURE: &str = "platform::keyboard::tests::console_reader_fixture";
+
+mod write_progress;
 
 #[test]
 fn console_reader_fixture() {
@@ -78,28 +80,66 @@ fn read_console(directory: &Path) -> io::Result<()> {
     std::fs::rename(pending, directory.join("result"))
 }
 
+fn check_fixture(pty: &mut tty::Pty, directory: &Path) {
+    if let Ok(error) = std::fs::read_to_string(directory.join("error")) {
+        panic!("fixture failed: {error}");
+    }
+    if let Some(tty::ChildEvent::Exited(status)) = pty.next_child_event() {
+        panic!("fixture exited before completing the operation: {status:?}");
+    }
+}
+
+fn drain_output(pty: &mut tty::Pty, output: &mut Vec<u8>) {
+    let mut buffer = [0; 4096];
+    match pty.reader().read(&mut buffer) {
+        Ok(count) => output.extend_from_slice(&buffer[..count]),
+        Err(error)
+            if matches!(error.kind(), io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock) =>
+        {
+            ()
+        },
+        Err(error) => panic!("ConPTY read failed: {error}"),
+    }
+}
+
 fn wait_file(pty: &mut tty::Pty, path: &Path) -> Vec<u8> {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut output = Vec::new();
-    let mut buffer = [0; 4096];
     loop {
         if let Ok(bytes) = std::fs::read(path) {
             return bytes;
         }
-        if let Ok(error) = std::fs::read_to_string(path.with_file_name("error")) {
-            panic!("fixture failed: {error}");
-        }
-        match pty.reader().read(&mut buffer) {
-            Ok(count) => output.extend_from_slice(&buffer[..count]),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => (),
-            Err(error) => panic!("ConPTY read failed: {error}"),
-        }
+        check_fixture(pty, path.parent().unwrap());
+        drain_output(pty, &mut output);
         assert!(
             Instant::now() < deadline,
             "fixture did not write {path:?}; output: {:?}",
             String::from_utf8_lossy(&output),
         );
         std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn write_input(pty: &mut tty::Pty, directory: &Path, mut input: &[u8], label: &str) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let total = input.len();
+    let mut output = Vec::new();
+    while !input.is_empty() {
+        check_fixture(pty, directory);
+        drain_output(pty, &mut output);
+        let written = pty.writer().write(input);
+        let closed = pty.writer().is_closed();
+        input = write_progress::advance(input, written, closed, deadline).unwrap_or_else(|error| {
+            panic!(
+                "{label}: ConPTY input failed after {}/{} bytes: {error}; output: {:?}",
+                total - input.len(),
+                total,
+                String::from_utf8_lossy(&output),
+            )
+        });
+        if !input.is_empty() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 }
 
@@ -145,7 +185,7 @@ fn modified_enter_reaches_native_and_byte_readers_through_conpty() {
         if reader == "bytes" {
             input.push(b'~');
         }
-        pty.writer().write_all(&input).unwrap();
+        write_input(&mut pty, directory.path(), &input, &format!("{program}: {mode:?}/{reader}"));
         let result = wait_file(&mut pty, &directory.path().join("result"));
         assert_eq!(result, expected, "{program}: {mode:?}");
     }
