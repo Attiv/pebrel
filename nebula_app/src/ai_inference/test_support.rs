@@ -32,6 +32,8 @@ pub(crate) fn reply(
                 Err(error) => panic!("HTTP fixture accept: {error}"),
             }
         };
+        // Darwin can inherit the listener's nonblocking mode on accepted sockets.
+        stream.set_nonblocking(false).unwrap();
         stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut request_line = String::new();
@@ -66,4 +68,23 @@ pub(crate) fn reply(
         Captured { request_line, authorization, body }
     });
     (url, server)
+}
+
+#[test]
+fn fragmented_http_requests_wait_for_headers_and_body() {
+    let body = r#"{"fragmented":true}"#;
+    let (url, server) = reply(serde_json::json!({"ok": true}), "200 OK", || {});
+    let mut stream = std::net::TcpStream::connect(url.strip_prefix("http://").unwrap()).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    stream.write_all(b"POST /fragmented HTTP/1.1\r\n").unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    write!(stream, "Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    stream.write_all(body.as_bytes()).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    let captured = server.join().unwrap();
+    assert_eq!(captured.request_line, "POST /fragmented HTTP/1.1\r\n");
+    assert_eq!(captured.body, serde_json::json!({"fragmented": true}));
 }
