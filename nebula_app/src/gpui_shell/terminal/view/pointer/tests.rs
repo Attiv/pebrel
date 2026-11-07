@@ -117,16 +117,19 @@ fn mac_delete_chords_use_the_focused_terminal_and_dead_sessions_ignore_keys(
         focus.focus(window, cx);
     });
     draw(&mut cx);
+    // A settled layout can put PTY resize messages before the keyboard bytes.
+    cx.simulate_resize(gpui::size(px(760.0), px(540.0)));
+    draw(&mut cx);
+    cx.executor().advance_clock(TerminalView::STARTUP_GRID_GRACE);
+    draw(&mut cx);
     cx.simulate_keystrokes("cmd-backspace");
-    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x15"));
+    assert_eq!(input_bytes(&receiver), b"\x15");
     cx.simulate_keystrokes("alt-backspace");
-    assert!(
-        matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x1b\x7f")
-    );
+    assert_eq!(input_bytes(&receiver), b"\x1b\x7f");
     cx.simulate_keystrokes("cmd-left");
-    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x01"));
+    assert_eq!(input_bytes(&receiver), b"\x01");
     cx.simulate_keystrokes("cmd-right");
-    assert!(matches!(receiver.try_recv().unwrap(), Msg::Input(bytes) if bytes.as_ref() == b"\x05"));
+    assert_eq!(input_bytes(&receiver), b"\x05");
     terminal.update(&mut cx, |view, cx| {
         view.apply_ssh_stage(crate::ssh_session::SshStage::Failed("disconnected".into()), cx);
     });
