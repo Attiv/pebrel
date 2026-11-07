@@ -1008,12 +1008,22 @@ impl Element for TerminalElement {
                 let ime_active = view.marked_text.as_deref().is_some_and(|m| !m.is_empty());
                 let same_frame =
                     view.suggest_anchor == Some((cursor.row as usize, cursor.col as usize));
-                if ime_active || !same_frame {
+                if ime_active || !same_frame || view.ai_search_active() {
                     (None, Vec::new(), None, 0, None)
                 } else {
                     (
-                        (!view.suggest.suggestion.is_empty())
-                            .then(|| view.suggest.suggestion.clone()),
+                        (!view.suggest.suggestion.is_empty()).then(|| {
+                            if view.has_ai_prediction() {
+                                format!(
+                                    "[{}] {}",
+                                    crate::gpui_shell::config::ui_language(cx)
+                                        .text(crate::i18n::Message::AiCommandPredictionSource),
+                                    view.suggest.suggestion
+                                )
+                            } else {
+                                view.suggest.suggestion.clone()
+                            }
+                        }),
                         view.suggest.completion_items.clone(),
                         view.suggest.completion_selected,
                         view.completion_viewport.offset,
@@ -1311,6 +1321,7 @@ const COMPLETION_TAG_WIDTH: f32 = 46.0;
 
 #[derive(Clone, Copy)]
 enum CompletionVisualKind {
+    Ai,
     History,
     Command,
     Directory,
@@ -1324,6 +1335,7 @@ fn completion_visual_kind(item: &crate::display::NebulaCompletionItem) -> Comple
     use crate::display::NebulaCompletionKind;
 
     match item.kind {
+        NebulaCompletionKind::Ai => CompletionVisualKind::Ai,
         NebulaCompletionKind::History => CompletionVisualKind::History,
         NebulaCompletionKind::Command => CompletionVisualKind::Command,
         NebulaCompletionKind::Dir => CompletionVisualKind::Directory,
@@ -1347,6 +1359,7 @@ fn completion_visual_kind(item: &crate::display::NebulaCompletionItem) -> Comple
 
 fn completion_tag(kind: CompletionVisualKind) -> &'static str {
     match kind {
+        CompletionVisualKind::Ai => "AI",
         CompletionVisualKind::History => "HIS",
         CompletionVisualKind::Command => "CMD",
         CompletionVisualKind::Directory => "DIR",
@@ -1363,7 +1376,7 @@ fn completion_kind_color(
 ) -> Hsla {
     match kind {
         CompletionVisualKind::History => colors.history,
-        CompletionVisualKind::Command => colors.command,
+        CompletionVisualKind::Command | CompletionVisualKind::Ai => colors.command,
         CompletionVisualKind::Directory => colors.directory,
         CompletionVisualKind::Rust => colors.rust_file,
         CompletionVisualKind::Toml => colors.toml,
@@ -1445,7 +1458,7 @@ fn paint_completion_icon(
             path.line_to(at(12.0, 12.0));
             path.line_to(at(15.0, 14.0));
         },
-        CompletionVisualKind::Command => {
+        CompletionVisualKind::Command | CompletionVisualKind::Ai => {
             path.move_to(at(5.0, 4.0));
             path.line_to(at(19.0, 4.0));
             path.curve_to(at(21.0, 6.0), at(21.0, 4.0));

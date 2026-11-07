@@ -628,6 +628,25 @@ mod tests {
     }
 
     #[test]
+    fn command_ai_metadata_round_trips_in_settings_backups() {
+        let directory = tempdir().unwrap();
+        let text = "command_ai_provider_id=custom-1\ncommand_ai_model=vendor/model\ncommand_ai_prediction_enabled=1\nprompt_suggestions_model=chat-model\n";
+        fs::write(directory.path().join("pebrel_settings.txt"), text).unwrap();
+        let original = nebula_settings::RuntimeSettings::from_raw(
+            &nebula_settings::RawSettings::from_text(text),
+        );
+        let archive = collect_from(directory.path(), BackupSelection::default()).unwrap();
+        fs::write(directory.path().join("pebrel_settings.txt"), "theme=Nord\n").unwrap();
+        restore_to(directory.path(), &archive).unwrap();
+        let restored = fs::read_to_string(directory.path().join("pebrel_settings.txt")).unwrap();
+        let restored = nebula_settings::RuntimeSettings::from_raw(
+            &nebula_settings::RawSettings::from_text(&restored),
+        );
+        assert_eq!(restored.command_ai, original.command_ai);
+        assert_eq!(restored.prompt_suggestions, original.prompt_suggestions);
+    }
+
+    #[test]
     fn config_collection_includes_lua_and_terminal_profiles() {
         let directory = tempdir().unwrap();
         fs::write(directory.path().join("nebula.lua"), "return {}").unwrap();

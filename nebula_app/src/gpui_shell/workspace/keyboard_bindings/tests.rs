@@ -237,6 +237,45 @@ fn cleared_shortcut_reaches_terminal_and_can_be_restored_without_restart() {
 }
 
 #[test]
+fn ai_search_uses_shared_platform_default_and_honors_override_and_unbind() {
+    use crate::config::Action;
+    use gpui::{KeyContext, Keymap, Keystroke};
+    let contexts = [KeyContext::parse("NebulaTerminal").unwrap()];
+    let default = if is_macos() { "cmd+shift+a" } else { "ctrl+shift+a" };
+    assert_eq!(
+        crate::display::keymap::parse_action("ToggleAiCommandSearch"),
+        Some(Action::ToggleAiCommandSearch)
+    );
+    let binding = custom_workspace_binding(default, &Action::ToggleAiCommandSearch).unwrap();
+    let input = [Keystroke::parse(&gpui_binding_combo(default)).unwrap()];
+    assert!(crate::display::keymap::GPUI.default_shortcuts().into_iter().any(|(combo, action)| {
+        action == Action::ToggleAiCommandSearch
+            && Keystroke::parse(&gpui_binding_combo(&combo)).unwrap() == input[0]
+    }));
+    let map = Keymap::new(vec![binding.clone()]);
+    assert!(
+        map.bindings_for_input(&input, &contexts).0[0]
+            .action()
+            .as_any()
+            .is::<ToggleAiCommandSearch>()
+    );
+    let cleared =
+        workspace_binding_in_context(default, &Action::ReceiveChar, Some("NebulaTerminal"))
+            .unwrap();
+    let rebound = custom_workspace_binding("alt+shift+a", &Action::ToggleAiCommandSearch).unwrap();
+    let map = Keymap::new(vec![binding, cleared, rebound]);
+    assert!(map.bindings_for_input(&input, &contexts).0.is_empty());
+    let remapped = [Keystroke::parse("alt-shift-a").unwrap()];
+    assert!(
+        map.bindings_for_input(&remapped, &contexts).0[0]
+            .action()
+            .as_any()
+            .is::<ToggleAiCommandSearch>()
+    );
+    assert!(map.bindings_for_input(&remapped, &[KeyContext::parse("Input").unwrap()]).0.is_empty());
+}
+
+#[test]
 fn cleared_ordinary_workspace_shortcut_stays_cleared_in_text_controls_and_restores() {
     use crate::config::Action;
     use gpui::{KeyContext, Keymap, Keystroke};
@@ -686,6 +725,21 @@ mod dispatch {
             assert_eq!(drain(), [0x0b], "removing the override restores terminal input");
             assert!(!workspace.read_with(&cx, |workspace, _| workspace.shell_picker_open));
         }
+        workspace.update(&mut cx, |workspace, cx| {
+            workspace
+                .update_keybinds(vec![("ctrl+shift+a".into(), "ToggleAiCommandSearch".into())], cx);
+        });
+        press("ctrl-shift-a", &mut cx);
+        assert_eq!(
+            drain(),
+            [0x01],
+            "AI search rejection at a foreground/non-prompt must propagate the original chord"
+        );
+        workspace.update(&mut cx, |workspace, cx| {
+            workspace.update_keybinds(vec![("ctrl+shift+a".into(), "ReceiveChar".into())], cx);
+        });
+        press("ctrl-shift-a", &mut cx);
+        assert_eq!(drain(), [0x01], "unbinding search must restore the terminal chord");
     }
 
     #[gpui::test]

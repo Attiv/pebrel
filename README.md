@@ -153,6 +153,19 @@ Choose **Inline** (Tab accepts the suggestion), **List** (Tab accepts the select
 candidate), or **Hybrid** (→ accepts the inline suggestion; Tab opens the list)
 in Settings.
 
+After choosing a command AI provider and model in Settings, press **Cmd+Shift+A**
+on macOS or **Ctrl+Shift+A** on Windows/Linux at an integrated local zsh, Bash 4+
+or PowerShell prompt to search for a command in natural language. Your current
+line becomes the query; Enter generates, Tab adopts without running, and Esc
+returns to the original draft. Only the current input, OS and shell type are sent
+to the selected provider; WSL and SSH are not yet supported.
+
+Automatic AI suffix completion is separately opt-in and off by default. With local
+completion enabled, a verified local prompt may suggest the rest of a nonempty command
+after 500 ms idle when local sources have no useful candidate. AI suggestions are marked;
+Tab/→ follow your completion mode, Escape dismisses, and execution still needs Enter.
+Only the current input, OS and Shell type are sent; WSL and SSH are not supported.
+
 <details>
 <summary>How history completion differs</summary>
 

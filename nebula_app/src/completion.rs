@@ -49,6 +49,38 @@ impl Cancellation {
     }
 }
 
+/// Native editor ownership is checked by the caller; execution scope remains application-owned.
+pub(crate) fn command_ai_shell(
+    env: &SuggestEnv,
+    execution: Option<&PaneExecContext>,
+    owner: &str,
+) -> Option<&'static str> {
+    if !env.is_this_machine() || execution.is_some_and(|scope| scope.wsl_distribution().is_some()) {
+        return None;
+    }
+    match owner.split_once(':')?.0 {
+        "zsh" => Some("zsh"),
+        "bash" => Some("bash"),
+        "pwsh" => Some("powershell"),
+        _ => None,
+    }
+}
+
+/// A verified snapshot is eligible only after local sources have finished without a candidate.
+pub(crate) fn command_prediction_eligible(
+    line: &str,
+    cursor: usize,
+    local_ready: bool,
+    local_useful: bool,
+) -> bool {
+    local_ready
+        && !local_useful
+        && cursor == line.len()
+        && !line.trim().is_empty()
+        && line.len() <= crate::ai_commands::MAX_INPUT_BYTES
+        && !line.chars().any(|ch| ch.is_control() || matches!(ch, '\u{2028}' | '\u{2029}'))
+}
+
 /// 来源缓存跟随 pane，具体来源及其适用条件不再由界面决定。
 #[derive(Debug, Default)]
 pub(crate) struct Session {

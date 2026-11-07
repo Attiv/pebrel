@@ -267,6 +267,8 @@ impl TerminalView {
             cx.observe_window_activation(window, |view, window, cx| {
                 let active = window.is_window_active();
                 if !active {
+                    view.close_ai_search(cx);
+                    view.invalidate_ai_prediction();
                     view.shell_pointer.invalidate();
                 }
                 if view.cursor_window_active != active {
@@ -277,10 +279,12 @@ impl TerminalView {
             cx.on_focus_in(&focus_handle, window, |view, _window, cx| {
                 if !view.cursor_pane_focused {
                     view.cursor_pane_focused = true;
+                    view.schedule_ai_prediction(cx);
                     view.restart_cursor_blink(cx);
                 }
             }),
             cx.on_focus_out(&focus_handle, window, |view, _event, _window, cx| {
+                view.invalidate_ai_prediction();
                 view.shell_pointer.invalidate();
                 view.path_drop.invalidate();
                 if view.cursor_pane_focused {
@@ -427,6 +431,10 @@ impl TerminalView {
             suggestion_task: None,
             completion_session: crate::completion::Session::default(),
             completion_editor: super::editor::Editor::default(),
+            ai_search: None,
+            ai_search_job: None,
+            ai_search_generation: 0,
+            ai_prediction: Default::default(),
             editor_query_task: None,
             completion_viewport: super::super::completion_viewport::CompletionViewport::default(),
             ghost_enabled,

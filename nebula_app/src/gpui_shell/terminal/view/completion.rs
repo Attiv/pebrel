@@ -6,6 +6,7 @@ use nebula_terminal::term::TermMode;
 
 impl TerminalView {
     pub(super) fn invalidate_completion_history(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_ai_prediction();
         self.suggestion_task = None;
         self.suggest.clear_completion_hints();
         self.suggest.completion_popup_requested = false;
@@ -16,6 +17,9 @@ impl TerminalView {
 
     pub(super) fn handle_completion_key(&mut self, key: &str, cx: &mut Context<Self>) -> bool {
         use crate::display::CompletionStyle;
+        if self.prediction_key(key, cx) {
+            return true;
+        }
         let hybrid = self.completion_style == CompletionStyle::Hybrid;
         if key == "escape"
             && (hybrid && self.suggest.completion_popup_requested
@@ -263,6 +267,9 @@ impl TerminalView {
         anchor: Option<(usize, usize)>,
         cx: &mut Context<Self>,
     ) {
+        if self.ai_search_active() {
+            return;
+        }
         let editor = self.completion_editor.snapshot(self.prompt_input_epoch).cloned();
         let line = editor.as_ref().map(|snapshot| snapshot.line.clone()).or(line);
         let cursor = editor.as_ref().map(|snapshot| snapshot.cursor);
@@ -328,6 +335,7 @@ impl TerminalView {
         );
         if self.suggest.completion_query_matches(&key) {
             if self.suggest.completion_query_ready(&key) {
+                self.mark_prediction_local_ready(&line, cursor);
                 self.finish_editor_action(cx);
             }
             return;
@@ -395,6 +403,9 @@ impl TerminalView {
                     result.suggestion.clear();
                     result.suggestion_edit = None;
                 }
+                if !result.suggestion.is_empty() || !result.completion_items.is_empty() {
+                    view.invalidate_ai_prediction();
+                }
                 view.suggest.suggestion = result.suggestion;
                 view.suggest.suggestion_edit = result.suggestion_edit;
                 let selected = view
@@ -410,6 +421,7 @@ impl TerminalView {
                         && !view.suggest.completion_items.is_empty())
                     .then_some(0)
                 });
+                view.present_ai_prediction();
                 let awaiting_directory = result.pending_remote_dir.is_some();
                 view.suggest.pending_remote_dir = result.pending_remote_dir;
                 view.completion_viewport
@@ -417,6 +429,11 @@ impl TerminalView {
                 view.drive_pending_remote_dir(cx);
                 if !awaiting_directory {
                     view.suggest.finish_completion_query();
+                    view.mark_prediction_local_ready(
+                        &expected_context.line,
+                        expected_context.cursor,
+                    );
+                    view.try_ai_prediction(cx);
                 }
                 // 命令候选已经可用时即可接受，不让尚在补充的目录来源占着 Enter。
                 if !awaiting_directory || !view.suggest.completion_items.is_empty() {

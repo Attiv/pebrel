@@ -401,6 +401,8 @@ impl SettingsPane {
         self.ssh_hosts = crate::gpui_shell::ssh_hosts::SshHostLists::load();
         let (runtime, settings) = crate::gpui_shell::config::Settings::load_current_snapshot(cx);
         self.runtime = runtime;
+        self.provider_store = crate::ai_providers::load();
+        self.reset_command_ai_settings();
         cx.set_global(settings);
         cx.emit(SettingsPaneEvent::BackupRestored);
         cx.notify();

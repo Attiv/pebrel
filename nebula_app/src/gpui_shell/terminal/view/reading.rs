@@ -22,6 +22,8 @@ impl TerminalView {
         if self.session.is_none() || self.answer_reader.is_some() {
             return;
         }
+        self.close_ai_search(cx);
+        self.invalidate_ai_prediction();
         self.clear_output_hover(cx);
         self.selecting = false;
         self.stop_selection_scroll();

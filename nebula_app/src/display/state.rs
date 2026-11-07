@@ -21,10 +21,24 @@ pub use nebula_settings::CompletionStyleName as CompletionStyle;
 /// Source of a popup completion candidate; drives the right-aligned tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NebulaCompletionKind {
+    Ai,
     History,
     Command,
     Dir,
     File,
+}
+
+impl NebulaCompletionKind {
+    /// Legacy badges keep their established language and glyphs; GPUI owns its styled file icons.
+    pub(super) fn legacy_badge(self, language: crate::i18n::UiLanguage) -> (&'static str, char) {
+        match self {
+            Self::Ai => ("AI", '✦'),
+            Self::History => (language.pick("历史", "hist"), '↶'),
+            Self::Command => (language.pick("命令", "cmd"), '›'),
+            Self::Dir => (language.pick("目录", "dir"), '/'),
+            Self::File => (language.pick("文件", "file"), '·'),
+        }
+    }
 }
 
 /// One row of the popup completion list.
@@ -364,4 +378,24 @@ pub enum SplitNav {
     Right,
     Up,
     Down,
+}
+
+#[cfg(test)]
+mod completion_origin_tests {
+    use super::NebulaCompletionKind::*;
+    use crate::i18n::UiLanguage;
+
+    #[test]
+    fn source_badges_preserve_legacy_text_and_identify_ai() {
+        for (kind, en, zh, glyph) in [
+            (History, "hist", "历史", '↶'),
+            (Command, "cmd", "命令", '›'),
+            (Dir, "dir", "目录", '/'),
+            (File, "file", "文件", '·'),
+            (Ai, "AI", "AI", '✦'),
+        ] {
+            assert_eq!(kind.legacy_badge(UiLanguage::EnUs), (en, glyph));
+            assert_eq!(kind.legacy_badge(UiLanguage::ZhCn), (zh, glyph));
+        }
+    }
 }

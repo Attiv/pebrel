@@ -46,6 +46,8 @@ mod notifications;
 pub use notifications::NotificationDuration;
 mod prompt_suggestions;
 pub use prompt_suggestions::PromptSuggestions;
+mod command_ai;
+pub use command_ai::CommandAi;
 mod quick_terminal;
 mod scrolling;
 pub use scrolling::{
@@ -957,6 +959,7 @@ pub struct RuntimeSettings {
     pub accept: AcceptKeyName,
     pub completion_style: CompletionStyleName,
     pub prompt_suggestions: PromptSuggestions,
+    pub command_ai: CommandAi,
     /// 全宽字形（CJK 等）bold run 用 Regular 字形（粗体提亮不加粗）。
     pub cjk_bold_regular: bool,
     pub tabs_position: TabsPositionName,
@@ -1153,6 +1156,7 @@ impl RuntimeSettings {
                 .and_then(CompletionStyleName::from_settings)
                 .unwrap_or_default(),
             prompt_suggestions: PromptSuggestions::from_raw(raw),
+            command_ai: CommandAi::from_raw(raw),
             cjk_bold_regular: raw.bool_on("cjk_bold_regular").unwrap_or(true),
             tabs_position: raw
                 .value("tabs_position")

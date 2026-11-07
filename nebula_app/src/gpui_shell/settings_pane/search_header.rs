@@ -288,7 +288,15 @@ mod tests {
     #[test]
     fn prediction_search_uses_the_existing_provider_route() {
         for &language in crate::display::UiLanguage::ALL {
-            for query in ["prediction", "prompt suggestions", "补齐", "预测"] {
+            for query in [
+                "prediction",
+                "prompt suggestions",
+                "补齐",
+                "预测",
+                "command ai search",
+                "AI搜索",
+                "命令搜索",
+            ] {
                 assert_eq!(matching_sections(query, language), vec![3], "{query}");
             }
             assert!(!matching_sections("shell", language).contains(&3));

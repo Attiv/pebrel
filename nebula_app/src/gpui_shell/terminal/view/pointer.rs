@@ -427,6 +427,9 @@ impl TerminalView {
         item: crate::display::NebulaCompletionItem,
         cx: &mut Context<Self>,
     ) -> bool {
+        if item.kind == crate::display::NebulaCompletionKind::Ai {
+            return self.prediction_key("right", cx);
+        }
         let insert = item.insert;
         if !self.completion_editor.permits_insert(&insert) {
             return false;

@@ -41,6 +41,9 @@ const RESET_KEYS: &[&str] = &[
     "prompt_suggestions_enabled",
     "prompt_suggestions_provider_id",
     "prompt_suggestions_model",
+    "command_ai_provider_id",
+    "command_ai_model",
+    "command_ai_prediction_enabled",
     "cjk_bold_regular",
     "tabs_position",
     "tab_reveal",
@@ -364,6 +367,17 @@ mod tests {
             crate::RuntimeSettings::from_raw(&crate::RawSettings::from_text(&saved))
                 .prompt_suggestions,
             crate::PromptSuggestions::default()
+        );
+    }
+
+    #[test]
+    fn reset_removes_command_ai_selection_without_erasing_private_data() {
+        let text = "command_ai_prediction_enabled=1\ncommand_ai_provider_id=one\ncommand_ai_model=model\nprovider_metadata=keep\ncli_model=keep\n";
+        let saved = default_settings_text(text);
+        assert_eq!(saved, "provider_metadata=keep\ncli_model=keep\n");
+        assert_eq!(
+            crate::RuntimeSettings::from_raw(&crate::RawSettings::from_text(&saved)).command_ai,
+            crate::CommandAi::default()
         );
     }
 

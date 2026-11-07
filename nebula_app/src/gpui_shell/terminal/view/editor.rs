@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Snapshot {
     pub line: String,
     pub cursor: usize,
@@ -14,6 +14,7 @@ pub(super) struct Snapshot {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Action {
+    Observe,
     Accept,
     List,
 }
@@ -33,6 +34,10 @@ pub(super) struct Editor {
 }
 
 impl Editor {
+    pub(super) fn owner(&self) -> Option<&str> {
+        self.owner.as_deref()
+    }
+
     pub(super) fn ready(&self) -> bool {
         self.owner.is_some()
     }
@@ -45,6 +50,11 @@ impl Editor {
     #[cfg(test)]
     pub(super) fn reported_line_for_test(&self) -> Option<&str> {
         self.last_report.as_deref()?.splitn(4, '\n').nth(3)
+    }
+
+    #[cfg(test)]
+    pub(super) fn reported_cursor_for_test(&self) -> Option<usize> {
+        self.last_report.as_deref()?.splitn(4, '\n').nth(2)?.parse().ok()
     }
 
     pub(super) fn permits_insert(&self, text: &str) -> bool {
@@ -156,6 +166,9 @@ impl TerminalView {
     pub(super) fn finish_editor_action(&mut self, cx: &mut Context<Self>) {
         let revision = self.completion_editor.revision();
         let Some(action) = self.completion_editor.take_action(revision) else { return };
+        if matches!(action, Action::Observe) {
+            return;
+        }
         if self.suggest.completion_popup_requested && !self.suggest.completion_items.is_empty() {
             self.suggest.completion_selected = Some(0);
         }
@@ -166,6 +179,7 @@ impl TerminalView {
                 .take()
                 .is_some_and(|item| self.accept_completion_item(item, cx)),
             Action::List => !self.suggest.completion_items.is_empty(),
+            Action::Observe => unreachable!(),
         };
         if !accepted {
             self.fallback_completion_tab(cx);
@@ -201,6 +215,7 @@ impl TerminalView {
                 self.suggestion_task = None;
                 self.suggest.clear_completion_hints();
             }
+            self.schedule_ai_prediction(cx);
             if queued == Some(self.prompt_input_epoch) {
                 self.query_completion_editor(cx);
             }
@@ -215,7 +230,24 @@ impl TerminalView {
             }
             if let Some(snapshot) = self.completion_editor.report(value) {
                 self.editor_query_task = None;
-                self.refresh_suggestion_from_snapshot(Some(snapshot.line), self.suggest_anchor, cx);
+                if self
+                    .completion_editor
+                    .action
+                    .is_some_and(|(_, action)| matches!(action, Action::Observe))
+                {
+                    self.completion_editor.take_action(self.completion_editor.revision());
+                    if self.ai_search_active() {
+                        self.handle_ai_editor_snapshot(snapshot, cx);
+                    } else {
+                        self.prediction_snapshot(snapshot, cx);
+                    }
+                } else {
+                    self.refresh_suggestion_from_snapshot(
+                        Some(snapshot.line),
+                        self.suggest_anchor,
+                        cx,
+                    );
+                }
             }
         }
     }
@@ -232,20 +264,31 @@ impl TerminalView {
             .unwrap_or_else(|| b"\x1b[24;6~".to_vec())
     }
 
+    pub(super) fn observe_completion_editor(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.completion_editor.ready() {
+            return false;
+        }
+        self.query_native_editor(Action::Observe, cx)
+    }
+
     pub(super) fn query_completion_editor(&mut self, cx: &mut Context<Self>) -> bool {
+        let action = if self.completion_style == crate::display::CompletionStyle::Inline {
+            Action::Accept
+        } else {
+            Action::List
+        };
+        self.query_native_editor(action, cx)
+    }
+
+    fn query_native_editor(&mut self, action: Action, cx: &mut Context<Self>) -> bool {
         if self.completion_editor.is_querying() {
-            return true;
+            return !matches!(action, Action::Observe);
         }
         let prompt = self.session.as_ref().is_some_and(|session| {
             let term = session.term.lock();
             term.nebula_prompt_active()
                 && !term.mode().intersects(TermMode::ALT_SCREEN | TermMode::VI)
         });
-        let action = if self.completion_style == crate::display::CompletionStyle::Inline {
-            Action::Accept
-        } else {
-            Action::List
-        };
         if !prompt {
             return false;
         }
@@ -263,8 +306,10 @@ impl TerminalView {
             // prompt and queued editor request still own this explicit list intent.
             self.suggest.completion_popup_requested = true;
         }
-        self.suggest.completion_suppressed_line = None;
-        self.suggest.clear_completion_hints();
+        if !matches!(action, Action::Observe) {
+            self.suggest.completion_suppressed_line = None;
+            self.suggest.clear_completion_hints();
+        }
         if send {
             let bytes = self.completion_editor_query_bytes();
             self.write_bytes(bytes);
@@ -283,7 +328,12 @@ impl TerminalView {
                     view.completion_editor.owner = None;
                     view.completion_editor.waiting.clear();
                     view.completion_editor.invalidate();
-                    view.fallback_completion_tab(cx);
+                    if matches!(action, Action::Observe) {
+                        view.ai_search_observation_failed(cx);
+                        view.prediction_observation_failed();
+                    } else {
+                        view.fallback_completion_tab(cx);
+                    }
                     cx.notify();
                 }
             });

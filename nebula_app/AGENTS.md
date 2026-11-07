@@ -32,3 +32,4 @@
 - Windows Acrylic 的动画期间透明回退与计时边界见 [`窗口状态切换`](../architecture/notes/nebula_app/platform/2026-09-22-acrylic-window-transitions.md)。
 - 内置命令目录与虚拟平台分组的权威归属、旧数据兼容和回滚边界见 [`saved_commands`](../architecture/notes/nebula_app/saved_commands/)。
 - 登录项的启动意图与首窗静默边界见 [`登录启动`](../architecture/notes/nebula_app/platform/startup/2026-10-10-login-launch-intent.md)。
+- 修改命令 AI 的输入归属、推理生命周期或外发上下文时，先读 [`command AI`](../architecture/notes/nebula_app/ai_commands/2026-11-06-native-command-ai-ownership.md)。

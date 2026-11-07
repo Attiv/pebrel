@@ -14,6 +14,7 @@ fn request(turn: &str) -> Request {
 
 #[test]
 fn repeated_turns_and_provider_changes_never_publish_another_prediction() {
+    let _guard = crate::ai_inference::test_guard();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let mut provider = AiProvider::preset(ProviderKind::Custom, "service-fixture");
     provider.enabled = true;

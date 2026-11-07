@@ -256,6 +256,9 @@ pub enum Action {
     /// Toggle the command palette.
     ToggleCommandPalette,
 
+    /// Toggle in-place natural-language command search.
+    ToggleAiCommandSearch,
+
     /// Open the quick-jump panel.
     OpenQuickJump,
 

@@ -63,6 +63,7 @@ pub(crate) const EDITABLE_ACTIONS: &[(Action, &str, &str)] = &[
     // -- 终端 --
     (Action::PromptJumpUp, "跳到上一个提示符", "Previous prompt"),
     (Action::PromptJumpDown, "跳到下一个提示符", "Next prompt"),
+    (Action::ToggleAiCommandSearch, "", ""),
     (Action::SearchForward, "搜索（向前）", "Search forward"),
     (Action::SearchBackward, "搜索（向后）", "Search backward"),
     (Action::Copy, "复制", "Copy"),
@@ -79,7 +80,7 @@ pub(crate) const GROUPS: &[(&str, &str, usize)] = &[
     ("标签页", "Tabs", 6),
     ("窗格", "Panes", 7),
     ("侧栏面板", "Side panels", 2),
-    ("终端", "Terminal", 9),
+    ("终端", "Terminal", 10),
 ];
 
 /// 只读展示行（无法在图形页编辑，TOML/settings 行仍可覆盖其中的表驱动键）。
@@ -146,6 +147,7 @@ pub(crate) const MACOS_COMMAND_ALIASES: &[(&str, Action)] = &[
     ("cmd+w", Action::CloseTab),
     ("cmd+z", Action::ReopenClosedTab),
     ("shift+cmd+p", Action::ToggleCommandPalette),
+    ("shift+cmd+a", Action::ToggleAiCommandSearch),
     ("cmd+k", Action::ToggleShellPicker),
     ("shift+cmd+f", Action::ToggleFilesPanel),
     ("cmd+d", Action::SplitRight),
@@ -211,6 +213,7 @@ fn action_message(action: &Action) -> Option<crate::i18n::Message> {
         Action::ToggleGitPanel => Message::SettingsKeymapActionGitPanel,
         Action::PromptJumpUp => Message::SettingsKeymapActionPreviousPrompt,
         Action::PromptJumpDown => Message::SettingsKeymapActionNextPrompt,
+        Action::ToggleAiCommandSearch => Message::AiCommandSearch,
         Action::SearchForward => Message::SettingsKeymapActionSearchForward,
         Action::SearchBackward => Message::SettingsKeymapActionSearchBackward,
         Action::Copy => Message::CommonCopy,

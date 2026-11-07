@@ -44,9 +44,14 @@ impl TerminalView {
         if !self.accepts_input() {
             return;
         }
+        let escape = keystroke.key == "escape" && keystroke.modifiers == gpui::Modifiers::default();
         self.cursor_animation.note_encoded_key(&keystroke, &bytes);
         cx.emit(TerminalViewEvent::UserInput(TerminalInput::Key(keystroke)));
         self.write_input(bytes, cx);
+        if escape {
+            // Native Escape advances the input epoch without opting into another prediction.
+            self.dismiss_ai_prediction();
+        }
     }
 
     /// IME 提交、补全接受与粘贴：上报**文本**而不是已经加过哨兵的字节。

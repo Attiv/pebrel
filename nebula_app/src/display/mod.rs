@@ -9316,22 +9316,8 @@ impl Display {
             selected.filter(|index| *index >= rows).map(|index| index + 1 - rows).unwrap_or(0);
 
         let language = self.nebula_language;
-        let tag = |kind: NebulaCompletionKind| -> &'static str {
-            match kind {
-                NebulaCompletionKind::History => language.pick("历史", "hist"),
-                NebulaCompletionKind::Command => language.pick("命令", "cmd"),
-                NebulaCompletionKind::Dir => language.pick("目录", "dir"),
-                NebulaCompletionKind::File => language.pick("文件", "file"),
-            }
-        };
-        let icon = |kind: NebulaCompletionKind| -> char {
-            match kind {
-                NebulaCompletionKind::History => '↶',
-                NebulaCompletionKind::Command => '›',
-                NebulaCompletionKind::Dir => '/',
-                NebulaCompletionKind::File => '·',
-            }
-        };
+        let tag = |kind: NebulaCompletionKind| kind.legacy_badge(language).0;
+        let icon = |kind: NebulaCompletionKind| kind.legacy_badge(language).1;
         let cell_width =
             |text: &str| -> usize { text.chars().map(|c| c.width().unwrap_or(0)).sum() };
 

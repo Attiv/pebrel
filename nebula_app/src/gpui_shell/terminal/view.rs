@@ -3,6 +3,8 @@
 #[cfg(all(test, feature = "gpui-test-support"))]
 mod activity_tests;
 mod agent_activity;
+mod ai_prediction;
+mod ai_search;
 mod broadcast;
 mod completion;
 #[cfg(all(test, feature = "gpui-test-support"))]
@@ -526,6 +528,10 @@ pub struct TerminalView {
     suggestion_task: Option<suggest::Pending>,
     completion_session: crate::completion::Session,
     completion_editor: editor::Editor,
+    ai_search: Option<ai_search::Search>,
+    ai_search_job: Option<ai_search::Job>,
+    ai_search_generation: u64,
+    ai_prediction: ai_prediction::Prediction,
     editor_query_task: Option<gpui::Task<()>>,
     ghost_enabled: bool,
     completion_style: crate::display::CompletionStyle,
@@ -609,6 +615,8 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if !visible {
+            self.close_ai_search(cx);
+            self.invalidate_ai_prediction();
             self.shell_pointer.invalidate();
             self.clear_output_hover(cx);
         }
@@ -910,6 +918,9 @@ impl TerminalView {
 
     /// 让 EventLoop 退出并回收 ConPTY/子进程。幂等：重复调用只会得到发送失败。
     pub fn shutdown(&self) {
+        if let Some(job) = &self.ai_search_job {
+            job.cancelled.store(true, std::sync::atomic::Ordering::Release);
+        }
         if let Some(session) = &self.session {
             let _ = session.notifier.0.send(Msg::Shutdown);
         }
@@ -953,6 +964,8 @@ impl TerminalView {
         if self.ssh_failed() {
             return;
         }
+        self.close_ai_search(cx);
+        self.invalidate_ai_prediction();
         self.shell_pointer.invalidate();
         self.completion_editor.invalidate();
         self.editor_query_task = None;
@@ -983,6 +996,7 @@ impl TerminalView {
             self.refresh_program_status(cx);
         }
         self.sync_native_prompt();
+        self.schedule_ai_prediction(cx);
         self.restart_cursor_blink(cx);
         cx.notify();
     }
@@ -1046,7 +1060,7 @@ impl TerminalView {
     }
 
     pub fn cursor_visible(&self) -> bool {
-        self.cursor_visible
+        self.ai_search.is_none() && self.cursor_visible
     }
 
     /// 输出驱动的渲染帧按 [`OUTPUT_FRAME_MIN_INTERVAL`] 合并：间隔内的批次
@@ -1151,6 +1165,8 @@ impl TerminalView {
     /// 热应用运行时设置（设置页改动后由宿主调用）。默认光标样式只更新
     /// `Term` 的 fallback；程序通过 DECSCUSR 设置的临时样式仍保持权威。
     pub fn apply_settings(&mut self, cx: &mut Context<Self>) {
+        self.close_ai_search(cx);
+        self.invalidate_ai_prediction();
         self.shell_pointer.invalidate();
         crate::gpui_shell::font_loading::ensure_selected(cx);
         self.cursor_animation.reset();
@@ -1523,6 +1539,10 @@ impl TerminalView {
     }
 
     fn on_terminal_tab(&mut self, _: &TerminalTab, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ai_search.is_some() {
+            self.ai_search_tab(window, cx);
+            return;
+        }
         if !self.focus_handle.is_focused(window) {
             cx.propagate();
             return;
@@ -1563,6 +1583,9 @@ impl Drop for TerminalView {
 
 impl Focusable for TerminalView {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        if let Some(focus) = self.ai_search_focus(cx) {
+            return focus;
+        }
         self.answer_reader.as_ref().map_or_else(
             || {
                 // 工作区会在分屏聚焦或标签恢复后延迟设置焦点，搜索输入仍须拥有它。
@@ -1649,6 +1672,7 @@ impl gpui::EntityInputHandler for TerminalView {
         if self.answer_reader.is_some() || !self.focus_handle.is_focused(window) {
             return;
         }
+        self.invalidate_ai_prediction();
         let marked_text = if new_text.is_empty() { None } else { Some(new_text.to_string()) };
         if self.marked_text != marked_text {
             self.marked_text = marked_text;
@@ -1680,6 +1704,7 @@ impl gpui::EntityInputHandler for TerminalView {
 
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.validate_ai_prediction(cx);
         if let Some(reader) = &self.answer_reader {
             return div().size_full().child(reader.clone()).into_any_element();
         }
@@ -1811,6 +1836,9 @@ impl Render for TerminalView {
         }
         if self.session.is_some() {
             root = root.child(self.reading_chrome(cx));
+        }
+        if let Some(search) = self.ai_search_chrome(window, cx) {
+            root = root.child(search);
         }
         root.into_any_element()
     }

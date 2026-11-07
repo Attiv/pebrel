@@ -2,6 +2,8 @@
 
 use super::*;
 
+gpui::actions!(nebula_workspace, [ToggleAiCommandSearch]);
+
 // App-owned keybinding sources. GPUI gives untagged component bindings source
 // priority 0; a workspace null must suppress workspace defaults, not native
 // input editing. These identifiers are reserved here, not persisted settings.
@@ -17,6 +19,7 @@ pub(super) const STATIC_DEFAULT_COMBOS: &[&str] = &[
     "ctrl-shift-b",
     "ctrl-,",
     "ctrl-shift-p",
+    "ctrl-shift-a",
     "ctrl-k",
     "ctrl-shift-f",
     "escape",
@@ -102,6 +105,7 @@ pub(super) fn default_workspace_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("ctrl-shift-b", ToggleSidebar, None),
         KeyBinding::new("ctrl-,", OpenSettings, None),
         KeyBinding::new("ctrl-shift-p", ToggleCommandPalette, None),
+        KeyBinding::new("ctrl-shift-a", ToggleAiCommandSearch, Some("NebulaTerminal")),
         KeyBinding::new("ctrl-k", ToggleShellPicker, None),
         KeyBinding::new("ctrl-shift-f", ToggleFileTree, None),
         // Esc 只在命令/Shell 面板打开时关面板。绑成 `None` 会在终端聚焦时
@@ -275,6 +279,9 @@ fn workspace_binding_in_context(
     }
     match action {
         Action::ToggleCommandPalette => Some(KeyBinding::new(&combo, ToggleCommandPalette, scope)),
+        Action::ToggleAiCommandSearch => {
+            Some(KeyBinding::new(&combo, ToggleAiCommandSearch, scope.or(Some("NebulaTerminal"))))
+        },
         Action::ToggleShellPicker => Some(KeyBinding::new(&combo, ToggleShellPicker, scope)),
         Action::CreateNewTab => Some(KeyBinding::new(&combo, NewTerminal, scope)),
         Action::CreateNewWindow => Some(KeyBinding::new(&combo, NewWindow, scope)),

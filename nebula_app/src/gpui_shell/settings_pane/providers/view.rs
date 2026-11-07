@@ -48,6 +48,7 @@ impl SettingsPane {
     ) -> gpui::Div {
         self.prepare_provider_brands(window, cx);
         self.prepare_prediction_settings(window, cx);
+        self.prepare_command_ai_settings(window, cx);
         let language = crate::gpui_shell::config::ui_language(cx);
         let available =
             (f32::from(window.viewport_size().width) - SETTINGS_NAV_WIDTH - 24.0).max(240.0);
@@ -343,6 +344,7 @@ impl SettingsPane {
                     .pb_6()
                     .gap_4()
                     .child(self.prediction_settings(cx))
+                    .child(self.command_ai_settings(cx))
                     .child(metrics)
                     .child(div().w_full().min_w_0().overflow_x_scrollbar().child(table)),
             )

@@ -175,6 +175,13 @@ impl Render for NebulaWorkspace {
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
                 this.toggle_settings(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &keyboard_bindings::ToggleAiCommandSearch, window, cx| {
+                if let Some(view) = this.tabs.get(this.active).and_then(WorkspaceTab::focused_view).cloned() {
+                    if !view.update(cx, |view, cx| view.toggle_ai_search(window, cx)) {
+                        cx.propagate();
+                    }
+                }
+            }))
             .on_action(cx.listener(|this, _: &ToggleCommandPalette, window, cx| {
                 this.toggle_command_palette(window, cx);
             }))

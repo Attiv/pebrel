@@ -1,5 +1,7 @@
 use super::*;
 use std::io::{Read, Write};
+use std::time::Duration;
+use zeroize::Zeroizing;
 
 fn provider(wire: &str) -> AiProvider {
     let mut provider = AiProvider::preset(ProviderKind::Custom, "prediction-test");
@@ -69,6 +71,7 @@ fn requests_are_short_independent_and_contain_user_voice() {
 
 #[test]
 fn real_http_path_accepts_only_a_complete_result_and_never_follows_redirects() {
+    let _guard = crate::ai_inference::test_guard();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let mut target = provider("responses");
     target.base_url = format!("http://{}", listener.local_addr().unwrap());
@@ -112,8 +115,7 @@ fn real_http_path_accepts_only_a_complete_result_and_never_follows_redirects() {
     let cancelled = AtomicBool::new(false);
     // Exercise the reusable production entrypoint; no provider file or keychain
     // is required after the snapshot has been prepared.
-    let client =
-        PreparedClient { provider: target, key: Zeroizing::new(b"synthetic-test-key".to_vec()) };
+    let client = PreparedClient::with_test_key(target, b"synthetic-test-key");
     assert_eq!(
         client.request("zh-CN", &messages, &cancelled).unwrap().as_deref(),
         Some("先测中文输入")
@@ -128,6 +130,7 @@ fn real_http_path_accepts_only_a_complete_result_and_never_follows_redirects() {
 #[test]
 #[ignore = "requires a private evaluation directory and an explicitly authorized model request"]
 fn live_empty_prompt_voice_evaluation() {
+    let _guard = crate::ai_inference::test_guard();
     let root = std::path::PathBuf::from(
         std::env::var_os("PEBREL_PROMPT_EVAL_DIR").expect("evaluation directory"),
     );
@@ -147,8 +150,7 @@ fn live_empty_prompt_voice_evaluation() {
     let mut target = provider("responses");
     target.base_url = config["base_url"].as_str().unwrap().into();
     target.model = config["model"].as_str().unwrap().into();
-    let client =
-        PreparedClient { provider: target, key: Zeroizing::new(key.trim().as_bytes().to_vec()) };
+    let client = PreparedClient::with_test_key(target, key.trim().as_bytes());
     let mut results = Vec::new();
     for case in cases.as_array().unwrap() {
         let messages: Vec<_> = case["messages"]
