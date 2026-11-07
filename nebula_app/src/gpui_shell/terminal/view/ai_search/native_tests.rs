@@ -179,8 +179,9 @@ fn native_zsh_query_cancel_and_tab_never_execute() {
                 let query = "写入无害测试标记";
                 cx.update_window(window.into(), |_, window, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(query.into()));
-                    key(window, cx, if cfg!(target_os = "macos") { "cmd-a" } else { "ctrl-a" });
-                    key(window, cx, if cfg!(target_os = "macos") { "cmd-v" } else { "ctrl-v" });
+                    let modifier = if crate::platform::Platform::current() == crate::platform::Platform::MacOS { "cmd" } else { "ctrl" };
+                    key(window, cx, &format!("{modifier}-a"));
+                    key(window, cx, &format!("{modifier}-v"));
                 }).map_err(|e| e.to_string())?;
                 wait_for(cx, window.into(), &terminal, |view, cx| view.ai_search.as_ref().is_some_and(|s| s.input.read(cx).value().as_ref() == query)).await?;
                 probe(cx, window.into(), &terminal, original, caret).await?;

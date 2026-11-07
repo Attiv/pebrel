@@ -129,10 +129,11 @@ class CiPlanCliTests(unittest.TestCase):
 
     def test_stable_release_hosts_follow_its_manifest_and_report_linux_not_executed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            for event in ("push", "workflow_dispatch", "workflow_call"):
-                with self.subTest(event=event):
+            for version, event in ((version, event) for version in ("2.4.0", "2.5.0")
+                                   for event in ("push", "workflow_dispatch", "workflow_call")):
+                with self.subTest(version=version, event=event):
                     output = Path(directory) / f"{event}.out"
-                    result = self.run_cli(event, {"ref": "refs/tags/v2.4.0"}, output, "2.4.0")
+                    result = self.run_cli(event, {"ref": f"refs/tags/v{version}"}, output, version)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     plan = self.outputs(output)
                     self.assertEqual([row["os"] for row in plan["native_matrix"]],

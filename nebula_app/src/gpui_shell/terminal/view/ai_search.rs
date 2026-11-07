@@ -555,5 +555,5 @@ impl TerminalView {
 #[cfg(all(test, feature = "gpui-test-support"))]
 mod tests;
 
-#[cfg(all(test, unix, feature = "gpui-test-support"))]
+#[cfg(all(test, feature = "gpui-test-support"))]
 mod native_tests;

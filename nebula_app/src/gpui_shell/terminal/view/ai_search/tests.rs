@@ -312,7 +312,11 @@ fn rendered_query_owns_paste_undo_ime_and_escape_in_a_narrow_pane(cx: &mut TestA
     let panel = window.debug_bounds("terminal-ai-search").expect("painted in-place query");
     assert!(panel.left() >= px(0.0) && panel.right() <= px(340.0));
     assert!(panel.top() >= px(0.0) && panel.bottom() <= px(280.0));
-    let modifier = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+    let modifier = if crate::platform::Platform::current() == crate::platform::Platform::MacOS {
+        "cmd"
+    } else {
+        "ctrl"
+    };
     window.update(|_, cx| cx.write_to_clipboard(ClipboardItem::new_string("粘贴查询".into())));
     window.simulate_keystrokes(&format!("{modifier}-a {modifier}-v"));
     window.run_until_parked();

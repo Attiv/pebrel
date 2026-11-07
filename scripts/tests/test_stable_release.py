@@ -343,37 +343,37 @@ class StableReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(StableReleaseError, "missing:"):
                 validate_assets(root, version)
 
-    def test_240_windows_macos_manifest_is_exact_without_rewriting_other_releases(self) -> None:
-        version = "2.4.0"
-        expected = (
-            f"Pebrel-v{version}-macos-arm64-preview.dmg",
-            f"Pebrel-v{version}-macos-x64-preview.dmg",
-            f"Pebrel-v{version}-windows-x64.zip",
-            f"Pebrel-v{version}-windows-x64-setup.exe",
-            f"Pebrel-v{version}-windows-arm64.zip",
-            f"Pebrel-v{version}-windows-arm64-setup.exe",
-        )
-        self.assertEqual(expected_asset_names(version), expected)
-        for ordinary in ("2.3.1", "2.3.2", "2.4.1", "2.5.0"):
-            with self.subTest(ordinary=ordinary):
-                names = expected_asset_names(ordinary)
-                self.assertEqual(len(names), 11)
-                self.assertTrue(any("-linux-" in name for name in names))
-                self.assertTrue(any(name.endswith(".apk") for name in names))
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in expected:
-                write_fake_asset(root / name)
-            self.assertEqual(len(validate_assets(root, version)), 6)
-            for suffix in ("linux-x64-preview.AppImage", "android-universal-preview.apk", "relay-manual.tar.gz"):
-                extra = root / f"Pebrel-v{version}-{suffix}"
-                write_fake_asset(extra)
-                with self.assertRaisesRegex(StableReleaseError, "unexpected:"):
+    def test_windows_macos_manifests_are_exact_without_rewriting_other_releases(self) -> None:
+        for version in ("2.4.0", "2.5.0"):
+            expected = (
+                f"Pebrel-v{version}-macos-arm64-preview.dmg",
+                f"Pebrel-v{version}-macos-x64-preview.dmg",
+                f"Pebrel-v{version}-windows-x64.zip",
+                f"Pebrel-v{version}-windows-x64-setup.exe",
+                f"Pebrel-v{version}-windows-arm64.zip",
+                f"Pebrel-v{version}-windows-arm64-setup.exe",
+            )
+            self.assertEqual(expected_asset_names(version), expected)
+            for ordinary in ("2.3.1", "2.3.2", "2.4.1", "2.5.1", "2.6.0"):
+                with self.subTest(ordinary=ordinary):
+                    names = expected_asset_names(ordinary)
+                    self.assertEqual(len(names), 11)
+                    self.assertTrue(any("-linux-" in name for name in names))
+                    self.assertTrue(any(name.endswith(".apk") for name in names))
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for name in expected:
+                    write_fake_asset(root / name)
+                self.assertEqual(len(validate_assets(root, version)), 6)
+                for suffix in ("linux-x64-preview.AppImage", "android-universal-preview.apk", "relay-manual.tar.gz"):
+                    extra = root / f"Pebrel-v{version}-{suffix}"
+                    write_fake_asset(extra)
+                    with self.assertRaisesRegex(StableReleaseError, "unexpected:"):
+                        validate_assets(root, version)
+                    extra.unlink()
+                (root / expected[-1]).unlink()
+                with self.assertRaisesRegex(StableReleaseError, "missing:"):
                     validate_assets(root, version)
-                extra.unlink()
-            (root / expected[-1]).unlink()
-            with self.assertRaisesRegex(StableReleaseError, "missing:"):
-                validate_assets(root, version)
 
     def test_222_notes_reject_unpublished_android_and_relay_hashes(self) -> None:
         version = "2.2.2"
