@@ -514,6 +514,7 @@ impl TerminalView {
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .gap_2()
                         .child(
                             Button::new("ai-search-adopt")

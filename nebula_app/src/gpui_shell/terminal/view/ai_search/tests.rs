@@ -250,11 +250,22 @@ fn unsupported_native_contexts_never_capture_or_request(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn rendered_query_owns_paste_undo_ime_and_escape_in_a_narrow_pane(cx: &mut TestAppContext) {
+    assert_rendered_query_controls(cx, crate::display::UiLanguage::EnUs);
+}
+
+#[gpui::test]
+fn rendered_chinese_query_controls_stay_reachable_in_a_narrow_pane(cx: &mut TestAppContext) {
+    assert_rendered_query_controls(cx, crate::display::UiLanguage::ZhCn);
+}
+
+fn assert_rendered_query_controls(cx: &mut TestAppContext, language: crate::display::UiLanguage) {
     cx.update(|cx| {
         gpui_component::init(cx);
         crate::gpui_shell::scientific_render::init(cx);
         crate::gpui_shell::terminal::init(cx);
-        cx.set_global(Settings::load(nebula_settings::ThemeName::Nord));
+        let mut settings = Settings::load(nebula_settings::ThemeName::Nord);
+        settings.ui_language = language;
+        cx.set_global(settings);
     });
     let mut output = None;
     let (_, window) = cx.add_window_view(|window, cx| {
@@ -344,9 +355,15 @@ fn rendered_query_owns_paste_undo_ime_and_escape_in_a_narrow_pane(cx: &mut TestA
         touch_phase: gpui::TouchPhase::Moved,
     });
     window.update(|window, cx| window.draw(cx).clear(cx));
-    let copy = window.debug_bounds("ai-search-copy").expect("copy control is visible").center();
-    assert!(panel.contains(&copy), "the copy hit target must be reachable inside the pane");
-    window.simulate_click(copy, gpui::Modifiers::default());
+    let copy = window.debug_bounds("ai-search-copy").expect("copy control is visible");
+    assert!(
+        copy.left() >= panel.left()
+            && copy.right() <= panel.right()
+            && copy.top() >= panel.top()
+            && copy.bottom() <= panel.bottom(),
+        "the whole copy hit target must be reachable inside the pane: panel={panel:?}, copy={copy:?}"
+    );
+    window.simulate_click(copy.center(), gpui::Modifiers::default());
     window.run_until_parked();
     window.update(|_, cx| {
         assert_eq!(cx.read_from_clipboard().unwrap().text().as_deref(), Some(command))
