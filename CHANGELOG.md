@@ -4,6 +4,63 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.5.1 - 2026-11-08
+
+### English
+
+This release lets native zsh history suggestions and opt-in AI command completion coexist, with separate acceptance-source settings for Tab and Right Arrow. AI command completion remains off by default.
+
+This customized fork release provides Windows x64/ARM64 installers and portable ZIPs plus macOS Apple Silicon/Intel DMGs. macOS retains its Preview label and ad-hoc signing; these packages are not notarized. Linux, Android and relay packages are outside this release's scope.
+
+#### Added
+
+- In supported integrated local zsh sessions with zsh-autosuggestions, keep the native history hint and show history and AI candidates together in a source-labelled panel. Choose a candidate explicitly without running it.
+- Configure Tab and Right Arrow independently to accept history or AI suggestions. The defaults are Tab for AI and Right Arrow for history; a manually selected candidate takes priority over either default. Accepting a suggestion still requires a separate Enter to execute the command.
+
+#### Fixed
+
+- Keep AI suggestions out of the Shell-owned history hint area instead of drawing competing suffixes over the same input line, including when an asynchronous native suggestion arrives.
+
+#### Improved
+
+- Recheck the native draft and suggestion before adoption; stale candidates are not inserted, and an AI result arriving later does not replace a manual choice. If the addressed source is unavailable, keep the original Shell key behavior. Existing completion modes remain unchanged outside the supported coexistence path.
+- Native history suggestion text stays local and temporary. Model requests still contain only the current input, OS and Shell type; WSL and SSH remain unsupported by command AI.
+
+### 中文
+
+本版允许 zsh 原生历史提示与需单独开启的 AI 命令补全并存，并可分别设置 Tab 和右方向键采用的来源。AI 命令补全仍默认关闭。
+
+本定制分支提供 Windows x64/ARM64 安装器与便携 ZIP，以及 macOS Apple Silicon/Intel DMG。macOS 保留 Preview 标识和 ad-hoc 签名，未进行公证。本次不发布 Linux、Android 或 relay 包。
+
+#### 新增
+
+- 在使用 zsh-autosuggestions 的受支持本地 zsh 集成会话中，保留原生历史灰字，并在带来源标识的候选区同时显示历史与 AI 建议。可手动选择候选，不会直接执行。
+- 分别设置 Tab 和右方向键采用历史或 AI 建议。默认 Tab 采用 AI、右方向键采用历史；手动选中的候选优先于两个按键的默认来源。采用后仍须另外按 Enter 才会执行命令。
+
+#### 修复
+
+- AI 建议不再画到 Shell 拥有的历史灰字区域，避免两套后缀在同一输入行重叠，包括异步原生提示稍后出现的情况。
+
+#### 改进
+
+- 采用前重新验证原生草稿与提示，不写入过期候选；迟到的 AI 结果不会抢走手动选择。对应来源不可用时保留 Shell 原本的按键行为；受支持共存路径以外的已有补齐模式不变。
+- 原生历史提示仅作本地临时数据。模型请求仍只包含当前输入、操作系统和 Shell 类型；命令 AI 仍不支持 WSL 和 SSH。
+
+### Contributors
+
+Release preparation by [Attiv](https://github.com/Attiv).
+
+发布准备：[Attiv](https://github.com/Attiv)。
+
+### SHA256
+
+- `Pebrel-v2.5.1-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.1-macos-x64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.1-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.1-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.1-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.1-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+
 ## 2.5.0 - 2026-11-07
 
 ### English

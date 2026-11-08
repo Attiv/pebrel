@@ -344,7 +344,7 @@ class StableReleaseTests(unittest.TestCase):
                 validate_assets(root, version)
 
     def test_windows_macos_manifests_are_exact_without_rewriting_other_releases(self) -> None:
-        for version in ("2.4.0", "2.5.0"):
+        for version in ("2.4.0", "2.5.0", "2.5.1"):
             expected = (
                 f"Pebrel-v{version}-macos-arm64-preview.dmg",
                 f"Pebrel-v{version}-macos-x64-preview.dmg",
@@ -354,7 +354,7 @@ class StableReleaseTests(unittest.TestCase):
                 f"Pebrel-v{version}-windows-arm64-setup.exe",
             )
             self.assertEqual(expected_asset_names(version), expected)
-            for ordinary in ("2.3.1", "2.3.2", "2.4.1", "2.5.1", "2.6.0"):
+            for ordinary in ("2.3.1", "2.3.2", "2.4.1", "2.5.2", "2.6.0"):
                 with self.subTest(ordinary=ordinary):
                     names = expected_asset_names(ordinary)
                     self.assertEqual(len(names), 11)

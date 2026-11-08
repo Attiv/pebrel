@@ -61,7 +61,7 @@ def expected_asset_names(version: str) -> tuple[str, ...]:
     if version_parts < (1, 7, 0):
         names += (f"NebulaTerminal-{version}-windows-x64-setup.exe",)
     # These explicitly scoped fork releases are Windows/macOS only; other manifests stay unchanged.
-    if version_parts in ((2, 4, 0), (2, 5, 0)):
+    if version_parts in ((2, 4, 0), (2, 5, 0), (2, 5, 1)):
         names = tuple(name for name in names if "-windows-" in name or "-macos-" in name)
     return names
 

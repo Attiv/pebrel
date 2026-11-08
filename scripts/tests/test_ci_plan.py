@@ -129,7 +129,7 @@ class CiPlanCliTests(unittest.TestCase):
 
     def test_stable_release_hosts_follow_its_manifest_and_report_linux_not_executed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            for version, event in ((version, event) for version in ("2.4.0", "2.5.0")
+            for version, event in ((version, event) for version in ("2.4.0", "2.5.0", "2.5.1")
                                    for event in ("push", "workflow_dispatch", "workflow_call")):
                 with self.subTest(version=version, event=event):
                     output = Path(directory) / f"{event}.out"
