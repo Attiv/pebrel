@@ -53,6 +53,10 @@ fn apply(snapshot: &mut Snapshot, edits: Vec<Edit>) {
     }
 }
 
+fn contains_native_editor_adapter(content: &str) -> bool {
+    content.contains(nebula_terminal::tty::connection_shell())
+}
+
 #[test]
 fn installed_shell_assets_include_the_native_editor_adapter() {
     let snapshot = snapshot();
@@ -60,11 +64,33 @@ fn installed_shell_assets_include_the_native_editor_adapter() {
     for name in ["bashrc", ".zshrc"] {
         let content =
             edits.iter().find(|edit| edit.name == name).unwrap().content.as_deref().unwrap();
+        // Installation owns embedding the complete adapter, not its printf spelling.
         assert!(
-            content.contains("__pebrel_editor_report()"),
-            "{name} must install the native query"
+            contains_native_editor_adapter(content),
+            "{name} must install the complete shared native editor adapter"
         );
-        assert!(content.contains("SetUserVar=pebrel_editor="), "{name} must report actual buffers");
+    }
+}
+
+#[test]
+fn installed_shell_asset_contract_rejects_missing_or_corrupted_editor_adapters() {
+    let edits = snapshot().plan(Action::Install).unwrap().unwrap();
+    let adapter = nebula_terminal::tty::connection_shell();
+    let (middle, ch) = adapter.char_indices().nth(adapter.chars().count() / 2).unwrap();
+    let mut corrupted = adapter.to_owned();
+    corrupted.replace_range(middle..middle + ch.len_utf8(), if ch == '!' { "?" } else { "!" });
+    let damaged_adapters = [String::new(), adapter[..middle].to_owned(), corrupted];
+    for name in ["bashrc", ".zshrc"] {
+        let content =
+            edits.iter().find(|edit| edit.name == name).unwrap().content.as_deref().unwrap();
+        for replacement in &damaged_adapters {
+            let damaged = content.replacen(adapter, replacement, 1);
+            assert_ne!(damaged, content, "{name}: negative control must alter the installed asset");
+            assert!(
+                !contains_native_editor_adapter(&damaged),
+                "{name}: missing or corrupted native editor adapter must be rejected"
+            );
+        }
     }
 }
 
