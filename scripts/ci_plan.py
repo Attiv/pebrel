@@ -171,9 +171,9 @@ def plan_matrices(
         if event_name == "push" and payload.get("ref") != f"refs/tags/v{release_version}":
             raise PlanError("release scope requires its matching stable tag")
         if __package__:
-            from scripts.stable_release import StableReleaseError, expected_asset_names
+            from scripts.stable_release import StableReleaseError, expected_asset_names, macos_package_matrix
         else:
-            from stable_release import StableReleaseError, expected_asset_names
+            from stable_release import StableReleaseError, expected_asset_names, macos_package_matrix
         try:
             names = expected_asset_names(release_version)
         except StableReleaseError as error:
@@ -181,6 +181,9 @@ def plan_matrices(
         selected = {platform.runner for platform in PLATFORMS}
         if not any("-linux-" in name for name in names):
             selected.remove("ubuntu-24.04")
+        selected -= {"macos-26", "macos-26-intel"} - {
+            row["runner"] for row in macos_package_matrix(release_version)
+        }
         return _matrices(selected)
 
     if event_name == "pull_request":

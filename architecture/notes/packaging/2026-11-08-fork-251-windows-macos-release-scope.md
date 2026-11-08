@@ -54,3 +54,5 @@ for 2.5.1 only; does not replace its rationale or ordinary full-platform CI.
 ## Revisit when
 
 A later fork release explicitly changes its platform scope.
+
+Superseded by [the ARM-macOS scope override](2026-11-08-fork-251-arm-macos-windows-release-scope.md) for 2.5.1.

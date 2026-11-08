@@ -63,7 +63,21 @@ def expected_asset_names(version: str) -> tuple[str, ...]:
     # These explicitly scoped fork releases are Windows/macOS only; other manifests stay unchanged.
     if version_parts in ((2, 4, 0), (2, 5, 0), (2, 5, 1)):
         names = tuple(name for name in names if "-windows-" in name or "-macos-" in name)
+    if version_parts == (2, 5, 1):
+        names = tuple(name for name in names if "-macos-x64-" not in name)
     return names
+
+
+def macos_package_matrix(version: str) -> list[dict[str, str]]:
+    names = expected_asset_names(version)
+    rows = (
+        {"runner": "macos-26", "architecture": "aarch64",
+         "native_architecture": "arm64", "asset_architecture": "arm64"},
+        {"runner": "macos-26-intel", "architecture": "x86_64",
+         "native_architecture": "x86_64", "asset_architecture": "x64"},
+    )
+    return [row for row in rows
+            if f"Pebrel-v{version}-macos-{row['asset_architecture']}-preview.dmg" in names]
 
 
 def mark_platform_previews(directory: Path, version: str) -> None:

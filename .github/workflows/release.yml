@@ -69,6 +69,7 @@ jobs:
       asset_version: ${{ steps.metadata.outputs.asset_version }}
       include_android: ${{ steps.metadata.outputs.include_android }}
       include_linux: ${{ steps.metadata.outputs.include_linux }}
+      macos_matrix: ${{ steps.metadata.outputs.macos_matrix }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -99,7 +100,8 @@ jobs:
           PY
           python3 - <<'PY'
           from pathlib import Path
-          from scripts.stable_release import expected_asset_names, validate_changelog, validate_notes
+          from scripts.stable_release import expected_asset_names, macos_package_matrix, validate_changelog, validate_notes
+          import json
           import os
           import subprocess
           version = subprocess.check_output(
@@ -114,6 +116,7 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"include_android={str(include_android).lower()}\n")
               output.write(f"include_linux={str(include_linux).lower()}\n")
+              output.write("macos_matrix=" + json.dumps({"include": macos_package_matrix(version)}) + "\n")
           PY
           {
             echo "version=$version"
@@ -276,16 +279,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - runner: macos-26
-            architecture: aarch64
-            native_architecture: arm64
-            asset_architecture: arm64
-          - runner: macos-26-intel
-            architecture: x86_64
-            native_architecture: x86_64
-            asset_architecture: x64
+      matrix: ${{ fromJSON(needs.prepare.outputs.macos_matrix) }}
     runs-on: ${{ matrix.runner }}
     env:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
@@ -686,9 +680,11 @@ jobs:
           import os
           from pathlib import Path
           from scripts.preview_release import validate_evidence
+          from scripts.stable_release import macos_package_matrix
           validate_evidence(
               Path("stable-evidence"), os.environ["SOURCE_COMMIT"], windows_arm64=True,
               include_linux=os.environ["INCLUDE_LINUX"] == "true",
+              macos_architectures=tuple(row["architecture"] for row in macos_package_matrix(os.environ["PACKAGE_VERSION"])),
           )
           PY
           if [[ "$INCLUDE_ANDROID" == true ]]; then

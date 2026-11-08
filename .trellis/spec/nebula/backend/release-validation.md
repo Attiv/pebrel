@@ -2,13 +2,13 @@
 
 ## 1. Scope / trigger
 
-Use for fork/upstream integration, stable platform scope, and native initialization caller changes. The authoritative current-release policy is architecture/notes/packaging/2026-11-03-fork-windows-macos-release-scope.md; asset lists remain owned by scripts/stable_release.py, not copied here.
+Use for fork/upstream integration, stable platform scope, and native initialization caller changes. Version-specific rationale lives under architecture/notes/packaging/; the asset manifest and derived platform matrices remain owned by scripts/stable_release.py, not copied here.
 
 ## 2. Signatures
 
 - stable_release.expected_asset_names(version: str) -> tuple[str, ...].
 - ci_plan.plan_matrices(event_name, payload, changed_paths=None, *, release_version="") -> (native_matrix, release_matrix).
-- preview_release.validate_evidence(directory, commit, *, windows_arm64=False, include_linux=True).
+- preview_release.validate_evidence(directory, commit, *, windows_arm64=False, include_linux=True, macos_architectures=("aarch64", "x86_64")).
 - gpui_shell::init(cx: &mut App, startup_window: config::StartupWindow); test callers use existing StartupWindow::load(None), not the former Option<PathBuf> argument.
 - Settings line-level persistence lives in private nebula_settings/src/persistence.rs with unchanged root reexports; RawSettings values remain private.
 
@@ -16,7 +16,7 @@ Use for fork/upstream integration, stable platform scope, and native initializat
 
 Stable prepare validates package version/tag and derives include_linux/include_android from expected_asset_names. The validated version passes through the reusable native workflow to the planner. Ordinary calls preserve the full matrix; the reviewed 2.4.0 fork exception selects Windows/macOS only. Required check names do not change.
 
-Every included native/package job must succeed for the same source; excluded Linux/Android jobs must be skipped. Windows ARM64 and both macOS conformance/LaunchServices receipts stay mandatory. Upload exact validated manifest paths; refuse existing mismatched tags/releases. Source notes and Changelog share supported pending hashes, replaced by real hashes only in rendered public notes.
+Every included native/package job must succeed for the same source; excluded platforms must not create native/package jobs. Windows ARM64 and every manifest-selected macOS conformance/LaunchServices receipt stay mandatory; default/historical evidence calls still require both Mac architectures. The version's manifest-derived Mac matrix drives packaging, native planning and aggregate evidence scope. Empty, duplicate or unknown evidence scopes are invalid; missing any retained receipt blocks publication. Upload exact validated manifest paths; refuse existing mismatched tags/releases. Source notes and Changelog share supported pending hashes, replaced by real hashes only in rendered public notes.
 
 Local product tests need absolute matching PEBREL_CONFIG_DIR/NEBULA_CONFIG_DIR, isolated HOME/XDG where applicable and scrubbed runtime/config routing. Preserve pinned CARGO_HOME/RUSTUP_HOME. Python helpers need Python >=3.11; select the actual subprocess interpreter, not a shell alias. Mac GPUI builds require the official Metal Toolchain, verified with xcrun metal --version. CI uses the pinned nextest runner and .config/nextest.toml fixture scheduling; Cargo's same-process parallel runner does not apply those groups.
 

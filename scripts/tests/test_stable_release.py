@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import os
+import textwrap
+from unittest.mock import patch
 import re
 import tempfile
 import unittest
@@ -344,7 +348,7 @@ class StableReleaseTests(unittest.TestCase):
                 validate_assets(root, version)
 
     def test_windows_macos_manifests_are_exact_without_rewriting_other_releases(self) -> None:
-        for version in ("2.4.0", "2.5.0", "2.5.1"):
+        for version in ("2.4.0", "2.5.0"):
             expected = (
                 f"Pebrel-v{version}-macos-arm64-preview.dmg",
                 f"Pebrel-v{version}-macos-x64-preview.dmg",
@@ -374,6 +378,68 @@ class StableReleaseTests(unittest.TestCase):
                 (root / expected[-1]).unlink()
                 with self.assertRaisesRegex(StableReleaseError, "missing:"):
                     validate_assets(root, version)
+
+    def test_251_scope_requires_only_arm_macos_and_both_windows_architectures(self) -> None:
+        version = "2.5.1"
+        expected = (
+            f"Pebrel-v{version}-macos-arm64-preview.dmg",
+            f"Pebrel-v{version}-windows-x64.zip",
+            f"Pebrel-v{version}-windows-x64-setup.exe",
+            f"Pebrel-v{version}-windows-arm64.zip",
+            f"Pebrel-v{version}-windows-arm64-setup.exe",
+        )
+        self.assertEqual(expected_asset_names(version), expected)
+        from scripts.stable_release import macos_package_matrix
+        for old in ("2.4.0", "2.5.0", "2.5.2"):
+            self.assertEqual([row["runner"] for row in macos_package_matrix(old)],
+                             ["macos-26", "macos-26-intel"])
+        self.assertEqual(macos_package_matrix(version), [{
+            "runner": "macos-26", "architecture": "aarch64",
+            "native_architecture": "arm64", "asset_architecture": "arm64",
+        }])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in expected:
+                write_fake_asset(root / name)
+            self.assertEqual(len(validate_assets(root, version)), 5)
+            extra = root / f"Pebrel-v{version}-macos-x64-preview.dmg"
+            write_fake_asset(extra)
+            with self.assertRaisesRegex(StableReleaseError, "unexpected:"):
+                validate_assets(root, version)
+            extra.unlink()
+            for name in expected:
+                asset = root / name
+                saved = asset.read_bytes()
+                asset.unlink()
+                with self.subTest(missing=name), self.assertRaisesRegex(StableReleaseError, "missing:"):
+                    validate_assets(root, version)
+                asset.write_bytes(saved)
+
+    def test_stable_workflow_exports_and_consumes_manifest_macos_matrix(self) -> None:
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        prepare = workflow.split("\n  prepare:\n", 1)[1].split("\n  linux:\n", 1)[0]
+        macos = workflow.split("\n  macos:\n", 1)[1].split("\n  windows:\n", 1)[0]
+        aggregate = workflow.split("\n  aggregate:\n", 1)[1].split("\n  publish:\n", 1)[0]
+        self.assertIn("macos_matrix: ${{ steps.metadata.outputs.macos_matrix }}", prepare)
+        self.assertIn("matrix: ${{ fromJSON(needs.prepare.outputs.macos_matrix) }}", macos)
+        self.assertIn("macos_architectures=", aggregate)
+        self.assertIn('macos_package_matrix(os.environ["PACKAGE_VERSION"])', aggregate)
+        blocks = re.findall(r"(?ms)^          python3 - <<'PY'\n(.*?)^          PY$", prepare)
+        self.assertEqual(len(blocks), 1)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "github-output"
+            with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}), \
+                    patch("subprocess.check_output", return_value="2.5.1\n"), \
+                    patch("scripts.stable_release.validate_notes"), \
+                    patch("scripts.stable_release.validate_changelog"):
+                exec(textwrap.dedent(blocks[0]), {})
+            values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            self.assertEqual(json.loads(values["macos_matrix"]), {"include": [{
+                "runner": "macos-26", "architecture": "aarch64",
+                "native_architecture": "arm64", "asset_architecture": "arm64",
+            }]})
+            self.assertEqual(values["include_linux"], "false")
+            self.assertEqual(values["include_android"], "false")
 
     def test_222_notes_reject_unpublished_android_and_relay_hashes(self) -> None:
         version = "2.2.2"

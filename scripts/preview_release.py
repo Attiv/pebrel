@@ -49,7 +49,11 @@ def verify_binary_freshness(binary: Path, repo: Path) -> None:
 
 def validate_evidence(
     directory: Path, commit: str, *, windows_arm64: bool = False, include_linux: bool = True,
+    macos_architectures: tuple[str, ...] = ("aarch64", "x86_64"),
 ) -> None:
+    if (not macos_architectures or len(set(macos_architectures)) != len(macos_architectures)
+            or any(architecture not in {"aarch64", "x86_64"} for architecture in macos_architectures)):
+        raise ManifestError("invalid macOS conformance architecture scope")
     root = str(Path(__file__).resolve().parents[1])
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -59,7 +63,8 @@ def validate_evidence(
     reports = []
     required_reports = {
         name: platform for name, platform in RUNTIME_REPORTS.items()
-        if include_linux or not platform.startswith("linux-")
+        if (include_linux or not platform.startswith("linux-"))
+        and (not platform.startswith("macos-") or platform.removeprefix("macos-") in macos_architectures)
     }
     if windows_arm64:
         required_reports["windows-arm64-report.json"] = "windows-aarch64"
@@ -78,7 +83,7 @@ def validate_evidence(
     errors = compare_reports(reports, golden)
     if errors:
         raise ManifestError("cross-platform mismatch: " + "; ".join(errors))
-    for architecture in ("aarch64", "x86_64"):
+    for architecture in macos_architectures:
         name = f"macos-{architecture}-launch.json"
         report = json.loads((directory / name).read_text(encoding="utf-8"))
         if (report.get("status") != "passed" or report.get("commit") != commit

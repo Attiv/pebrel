@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from contextlib import chdir
+import re
+import textwrap
+from unittest.mock import patch
 import json
 import os
 import tempfile
@@ -200,6 +204,49 @@ class PreviewReleaseTests(unittest.TestCase):
                 "screenshot": "captured", "rendered_text": True,
             }), encoding="utf-8")
         return report
+
+    def test_arm_macos_scope_still_requires_every_retained_runtime_and_launch_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "stable-evidence"
+            root.mkdir()
+            report = self.write_evidence(root)
+            report["platform"] = "windows-aarch64"
+            (root / "windows-arm64-report.json").write_text(json.dumps(report), encoding="utf-8")
+            for path in root.glob("linux-*.json"):
+                path.unlink()
+            for name in ("macos-x86_64-report.json", "macos-x86_64-launch.json"):
+                (root / name).unlink()
+            workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text(encoding="utf-8")
+            aggregate = workflow.split("\n  aggregate:\n", 1)[1].split("\n  publish:\n", 1)[0]
+            blocks = re.findall(r"(?ms)^          python3 - <<'PY'\n(.*?)^          PY$", aggregate)
+            self.assertEqual(len(blocks), 1)
+
+            def validate_from_workflow() -> None:
+                with chdir(root.parent), patch.dict(os.environ, {
+                    "SOURCE_COMMIT": "a" * 40, "PACKAGE_VERSION": "2.5.1", "INCLUDE_LINUX": "false",
+                }):
+                    exec(textwrap.dedent(blocks[0]), {})
+
+            validate_from_workflow()
+            with self.assertRaises(FileNotFoundError):
+                validate_evidence(root, "a" * 40, windows_arm64=True, include_linux=False)
+            for name in ("windows-report.json", "windows-arm64-report.json",
+                         "macos-aarch64-report.json", "macos-aarch64-launch.json"):
+                path = root / name
+                saved = path.read_bytes()
+                path.unlink()
+                with self.subTest(missing=name), self.assertRaises(FileNotFoundError):
+                    validate_from_workflow()
+                path.write_bytes(saved)
+            with self.assertRaisesRegex(ManifestError, "source commit"):
+                validate_evidence(root, "b" * 40, windows_arm64=True, include_linux=False,
+                                  macos_architectures=("aarch64",))
+
+    def test_invalid_macos_evidence_scope_cannot_disable_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for architectures in ((), ("arm64",), ("aarch64", "aarch64")):
+                with self.subTest(architectures=architectures), self.assertRaises(ManifestError):
+                    validate_evidence(Path(directory), "a" * 40, macos_architectures=architectures)
 
     def test_complete_evidence_requires_same_commit_and_installed_launch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

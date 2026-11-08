@@ -129,7 +129,7 @@ class CiPlanCliTests(unittest.TestCase):
 
     def test_stable_release_hosts_follow_its_manifest_and_report_linux_not_executed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            for version, event in ((version, event) for version in ("2.4.0", "2.5.0", "2.5.1")
+            for version, event in ((version, event) for version in ("2.4.0", "2.5.0")
                                    for event in ("push", "workflow_dispatch", "workflow_call")):
                 with self.subTest(version=version, event=event):
                     output = Path(directory) / f"{event}.out"
@@ -148,6 +148,22 @@ class CiPlanCliTests(unittest.TestCase):
             result = self.run_cli("workflow_dispatch", {}, output, "2.4.1")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(len(self.outputs(output)["native_matrix"]), 5)
+
+    def test_251_native_matrix_omits_only_unpublished_linux_and_macos_intel(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for event in ("push", "workflow_dispatch", "workflow_call"):
+                with self.subTest(event=event):
+                    output = Path(directory) / f"{event}.out"
+                    result = self.run_cli(event, {"ref": "refs/tags/v2.5.1"}, output, "2.5.1")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    plan = self.outputs(output)
+                    self.assertEqual([row["os"] for row in plan["native_matrix"]],
+                                     ["windows-2022", "macos-26", "windows-11-arm"])
+                    self.assertEqual(plan["release_matrix"], [{"os": "macos-26"}])
+                    self.assertEqual(len(plan["check_matrix"]), 7)
+                    for row in plan["check_matrix"]:
+                        excluded = "ubuntu-24.04" in row["name"] or "macos-26-intel" in row["name"]
+                        self.assertEqual(row["scheduled"], str(not excluded).lower())
 
     def test_release_scope_cannot_narrow_pr_schedule_merge_group_or_mismatched_tag(self) -> None:
         cases = (("pull_request", {}, "2.4.0"), ("merge_group", {}, "2.4.0"),
