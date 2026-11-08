@@ -52,6 +52,42 @@ crate::gpui_shell::init(cx, crate::gpui_shell::config::StartupWindow::load(None)
 
 Wrong: claim publication from a push or Actions artifact. Correct: verify triggered source/ref, then independently verify public title/tag/body/names/labels/sizes/digests after successful hosted publication.
 
+## Scenario: bounded native boot readiness
+
+### 1. Scope / trigger
+
+Use when changing packaged boot conformance, its API probes or polling. Rationale: `architecture/notes/scripts/conformance/2026-11-08-shared-boot-readiness-deadline.md`.
+
+### 2. Signatures
+
+The existing boot case uses `ConformanceContext.startup_timeout`; API/read calls may receive an optional tighter timeout. `ConformanceContext.poll(..., timeout=10.0, *, deadline=None)` optionally clamps its relative limit to the supplied absolute monotonic deadline; BOOT passes the same original deadline. Other callers' defaults remain unchanged.
+
+### 3. Contracts
+
+One original startup deadline covers a real nonempty tree for the original window/pane and the existing first-screen condition. Only this startup probe may treat `pane.procs/process_query_failed` as not-ready; other API/target/schema failures propagate. Permanent failures retain original structured details and fail by the same deadline. RPCs and sleep use remaining time; a late valid result cannot become success. No golden, product timeout or platform exception changes.
+
+### 4. Validation & error matrix
+
+| Condition | Required result |
+| --- | --- |
+| Query temporarily unavailable, then real matching tree and text before deadline | Pass actual readiness |
+| Permanently unavailable query or absent screen | Fail within original budget, retain diagnostic |
+| Wrong window/pane, malformed tree or unrelated API error | Immediate failure |
+| Budget exhausted before a request | No new RPC |
+| Valid response arrives after deadline | Failure, not late success |
+
+### 5. Good / base / bad cases
+
+Good: real target/tree/text ready within one budget. Base: immediately ready boot and default API callers behave unchanged. Bad: extra waiting windows, blanket retries, fake/empty process trees, late success or treating the original Intel error as conclusively transient without its reason.
+
+### 6. Tests required
+
+Run the real boot case through transient/valid, permanent, wrong-target and malformed-response fixtures; validate required native process fields/root identity, details, decreasing per-RPC time, no reset/no request after expiry, delayed poll entry and late-result rejection. Absolute poll deadlines may only tighten its existing relative cap; cover default callers too. Preserve resize observation order/geometry/cleanup and other conformance tests. Native packaged receipts still require a fresh same-source hosted run.
+
+### 7. Wrong vs correct
+
+Wrong: one fatal probe before the startup poll, or a second full timeout after it. Correct: one fixed deadline shared by the mandatory native process-tree and screen readiness checks, with genuine failure preserved.
+
 ## Scenario: nonblocking Windows keyboard fixture writes
 
 ### 1. Scope / trigger

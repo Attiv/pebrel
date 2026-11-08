@@ -71,7 +71,7 @@ class ResizeDiagnosticsTests(unittest.TestCase):
     def test_cold_sibling_renders_output_before_its_first_columns_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             ctx = ResizeContext(Path(directory), [57, 56, 80, 33], ["", " \n", "PS C:\\fixture> "])
-            with patch("time.sleep"), patch("time.monotonic", side_effect=[0, 0.1, 0.2, 0.3]):
+            with patch("time.sleep"), patch("time.monotonic", return_value=0.0):
                 result = resize.run(ctx)
             self.assertTrue(result["pty_columns_changed"])
             self.assertEqual(ctx.read_count, 3)

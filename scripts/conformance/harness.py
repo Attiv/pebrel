@@ -47,7 +47,11 @@ class ApiFailure(ConformanceError):
         self.error = error
         code = error.get("code", "unknown_error")
         message = error.get("message", "runtime request failed")
-        super().__init__(f"{method}: {code}: {message}")
+        details = error.get("details")
+        diagnostic = ""
+        if details is not None:
+            diagnostic = f"; details={json.dumps(details, ensure_ascii=False, sort_keys=True)}"
+        super().__init__(f"{method}: {code}: {message}{diagnostic}")
 
 
 class SkipCase(RuntimeError):
@@ -694,7 +698,9 @@ class ConformanceContext:
                     return tab
         raise ConformanceError(f"pane {pane_id} is absent from the runtime snapshot")
 
-    def read(self, pane_id: int | None = None, lines: int = 120) -> dict[str, Any]:
+    def read(
+        self, pane_id: int | None = None, lines: int = 120, *, timeout: float | None = None
+    ) -> dict[str, Any]:
         result = self.api(
             "pane.read",
             {
@@ -702,6 +708,7 @@ class ConformanceContext:
                 "pane_id": pane_id or self.pane_id,
                 "lines": lines,
             },
+            timeout=timeout,
         )
         require(isinstance(result, dict), "pane.read did not return an object")
         result["text"] = normalize_text(result.get("text", ""))
@@ -713,14 +720,18 @@ class ConformanceContext:
         predicate: Callable[[Any], bool],
         message: str,
         timeout: float = 10.0,
+        *,
+        deadline: float | None = None,
     ) -> Any:
-        deadline = time.monotonic() + timeout
+        absolute_deadline = deadline
+        relative_deadline = time.monotonic() + timeout
+        deadline = relative_deadline if deadline is None else min(deadline, relative_deadline)
         last: Any = None
         while time.monotonic() < deadline:
             last = probe()
-            if predicate(last):
+            if predicate(last) and (absolute_deadline is None or time.monotonic() < deadline):
                 return last
-            time.sleep(0.1)
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
         raise ConformanceError(f"{message}; last observation: {last!r}")
 
     def prompt(self, text: str, pane_id: int | None = None, submit: bool = True) -> Any:
