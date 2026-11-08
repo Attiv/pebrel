@@ -630,7 +630,7 @@ mod tests {
     #[test]
     fn command_ai_metadata_round_trips_in_settings_backups() {
         let directory = tempdir().unwrap();
-        let text = "command_ai_provider_id=custom-1\ncommand_ai_model=vendor/model\ncommand_ai_prediction_enabled=1\nprompt_suggestions_model=chat-model\n";
+        let text = "command_ai_tab_source=history\ncommand_ai_right_source=ai\ncommand_ai_provider_id=custom-1\ncommand_ai_model=vendor/model\ncommand_ai_prediction_enabled=1\nprompt_suggestions_model=chat-model\n";
         fs::write(directory.path().join("pebrel_settings.txt"), text).unwrap();
         let original = nebula_settings::RuntimeSettings::from_raw(
             &nebula_settings::RawSettings::from_text(text),

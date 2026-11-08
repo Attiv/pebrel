@@ -166,6 +166,13 @@ after 500 ms idle when local sources have no useful candidate. AI suggestions ar
 Tab/→ follow your completion mode, Escape dismisses, and execution still needs Enter.
 Only the current input, OS and Shell type are sent; WSL and SSH are not supported.
 
+With integrated local zsh history suggestions, keep the native gray text and see history
+and AI candidates together in a separate list. Command AI settings independently choose
+what Tab and → accept (defaults: AI and history). Click or use ↑/↓ to select a candidate;
+manual selection takes priority for both keys. Adoption never executes the command.
+Native history suggestions stay local and are not sent to the model; this mode may
+request AI even when native history is available.
+
 <details>
 <summary>How history completion differs</summary>
 

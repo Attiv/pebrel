@@ -17,6 +17,9 @@ impl TerminalView {
 
     pub(super) fn handle_completion_key(&mut self, key: &str, cx: &mut Context<Self>) -> bool {
         use crate::display::CompletionStyle;
+        if let Some(handled) = self.native_prediction_key(key, cx) {
+            return handled;
+        }
         if self.prediction_key(key, cx) {
             return true;
         }
@@ -403,7 +406,9 @@ impl TerminalView {
                     result.suggestion.clear();
                     result.suggestion_edit = None;
                 }
-                if !result.suggestion.is_empty() || !result.completion_items.is_empty() {
+                if !view.native_prediction_coexists()
+                    && (!result.suggestion.is_empty() || !result.completion_items.is_empty())
+                {
                     view.invalidate_ai_prediction();
                 }
                 view.suggest.suggestion = result.suggestion;

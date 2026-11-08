@@ -3,6 +3,7 @@ use super::*;
 use gpui::{EntityInputHandler as _, WindowBounds, WindowOptions, size};
 use std::{path::PathBuf, sync::Mutex, time::Duration};
 
+mod coexistence;
 mod lifecycle;
 mod prediction;
 
@@ -102,6 +103,19 @@ fn native_zsh_query_cancel_and_tab_never_execute() {
         "PROMPT='QA> '\nRPROMPT=''\nHISTFILE=''\nbindkey -e\n",
     )
     .unwrap();
+    if let Some(plugin) = std::env::var_os("PEBREL_AI_SEARCH_QA_PLUGIN") {
+        use std::io::Write as _;
+        let plugin = PathBuf::from(plugin).canonicalize().unwrap();
+        assert!(plugin.starts_with(std::env::current_dir().unwrap().join("tmp")));
+        assert!(!plugin.to_string_lossy().contains('\''));
+        let mut rc =
+            std::fs::OpenOptions::new().append(true).open(output.join("shell/.zshrc")).unwrap();
+        writeln!(rc, "HISTSIZE=100\nSAVEHIST=0\nsource '{}'", plugin.display()).unwrap();
+        for index in 0..3 {
+            writeln!(rc, "print -s -- \"printf '并列{index}历史' > coex-history-{index}\"")
+                .unwrap();
+        }
+    }
     let outcome = Arc::new(Mutex::new(None));
     let after = outcome.clone();
     gpui_platform::application().with_assets(crate::gpui_shell::assets::NebulaAssets).run(move |cx| {
@@ -109,7 +123,7 @@ fn native_zsh_query_cancel_and_tab_never_execute() {
         gpui_component::init(cx);
         crate::gpui_shell::terminal::init(cx);
         crate::gpui_shell::scientific_render::init(cx);
-        let settings = nebula_settings::CommandAi { provider_id: "native-loopback".into(), model: "fixture".into(), prediction_enabled: false };
+        let settings = nebula_settings::CommandAi { provider_id: "native-loopback".into(), model: "fixture".into(), prediction_enabled: false, ..Default::default() };
         nebula_settings::persist_keys(&settings.updates().unwrap()).unwrap();
         cx.set_global(Settings::load(nebula_settings::ThemeName::Nord));
         crate::gpui_shell::theme::apply_chrome_theme(cx);
@@ -141,6 +155,9 @@ fn native_zsh_query_cancel_and_tab_never_execute() {
                     window.activate_window();
                 }).map_err(|e| e.to_string())?;
                 wait_for(cx, window.into(), &terminal, |view, cx| view.ai_search_identity().is_some()).await?;
+                if std::env::var_os("PEBREL_AI_SEARCH_QA_PLUGIN").is_some() {
+                    return coexistence::run(cx, window.into(), &terminal, &output).await;
+                }
                 let original = "printf '原稿😀保持'";
                 let caret = "printf '原稿😀".len();
                 cx.update_window(window.into(), |_, window, cx| {

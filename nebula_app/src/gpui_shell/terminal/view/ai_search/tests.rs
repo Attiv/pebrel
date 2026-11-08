@@ -13,6 +13,7 @@ fn local(view: &mut TerminalView, cx: &mut Context<TerminalView>) {
         provider_id: "ai-search-test".into(),
         model: "fixture-model".into(),
         prediction_enabled: false,
+        ..Default::default()
     };
 }
 
@@ -143,6 +144,50 @@ fn adoption_rechecks_full_original_and_never_appends_enter(cx: &mut TestAppConte
         .collect();
     assert!(bytes.ends_with(b"echo adopted"));
     assert!(!bytes.contains(&b'\r') && !bytes.contains(&b'\n'));
+}
+
+#[gpui::test]
+fn adoption_ignores_native_display_changes_without_relaxing_draft_identity(
+    cx: &mut TestAppContext,
+) {
+    let (view, window, receiver) = super::super::startup_tests::open(cx);
+    for report in [
+        "zsh:fixture\nutf8+postdisplay\n5\necho 中文\n different suggestion",
+        "zsh:fixture\nutf8\n5\necho 中文",
+    ] {
+        window.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                local(view, cx);
+                view.toggle_ai_search(window, cx);
+                view.handle_completion_editor_report(
+                    "pebrel_editor",
+                    "zsh:fixture\nutf8+postdisplay\n5\necho 中文\n original suggestion",
+                    cx,
+                );
+                view.ai_search_chrome(window, cx);
+                view.ai_search.as_mut().unwrap().result = Some(SearchResult {
+                    command: "echo adopted".into(),
+                    explanation: "fixture".into(),
+                });
+                view.adopt_ai_search(cx);
+                view.handle_completion_editor_report("pebrel_editor", report, cx);
+                assert!(
+                    view.ai_search.is_none(),
+                    "Shell decoration changes must not invalidate the unchanged native draft"
+                );
+            });
+        });
+        let bytes: Vec<u8> = receiver
+            .try_iter()
+            .filter_map(|msg| match msg {
+                Msg::Input(bytes) => Some(bytes.into_owned()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert!(bytes.ends_with(b"echo adopted"));
+        assert!(!bytes.contains(&b'\r') && !bytes.contains(&b'\n'));
+    }
 }
 
 #[gpui::test]

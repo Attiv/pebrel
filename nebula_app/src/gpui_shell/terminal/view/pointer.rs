@@ -516,6 +516,10 @@ impl TerminalView {
         if event.button == MouseButton::Left
             && let Some(index) = self.completion_popup_hit(event.position)
         {
+            if self.select_native_prediction_choice(index, cx) {
+                cx.stop_propagation();
+                return;
+            }
             self.suggest.completion_selected = Some(index);
             if self.accept_completion_popup(cx) {
                 cx.notify();

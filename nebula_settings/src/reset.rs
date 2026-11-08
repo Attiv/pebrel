@@ -42,6 +42,8 @@ const RESET_KEYS: &[&str] = &[
     "prompt_suggestions_provider_id",
     "prompt_suggestions_model",
     "command_ai_provider_id",
+    "command_ai_tab_source",
+    "command_ai_right_source",
     "command_ai_model",
     "command_ai_prediction_enabled",
     "cjk_bold_regular",
@@ -372,7 +374,7 @@ mod tests {
 
     #[test]
     fn reset_removes_command_ai_selection_without_erasing_private_data() {
-        let text = "command_ai_prediction_enabled=1\ncommand_ai_provider_id=one\ncommand_ai_model=model\nprovider_metadata=keep\ncli_model=keep\n";
+        let text = "command_ai_tab_source=history\ncommand_ai_right_source=ai\ncommand_ai_prediction_enabled=1\ncommand_ai_provider_id=one\ncommand_ai_model=model\nprovider_metadata=keep\ncli_model=keep\n";
         let saved = default_settings_text(text);
         assert_eq!(saved, "provider_metadata=keep\ncli_model=keep\n");
         assert_eq!(

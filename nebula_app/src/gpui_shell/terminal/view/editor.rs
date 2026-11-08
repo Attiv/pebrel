@@ -8,8 +8,18 @@ use super::*;
 pub(super) struct Snapshot {
     pub line: String,
     pub cursor: usize,
+    pub native_suffix: Option<String>,
     pub syntax: pebrel_completions::command_context::ShellSyntax,
     epoch: u64,
+}
+
+impl Snapshot {
+    pub(super) fn same_draft(&self, other: &Self) -> bool {
+        self.line == other.line
+            && self.cursor == other.cursor
+            && self.syntax == other.syntax
+            && self.epoch == other.epoch
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -49,7 +59,13 @@ impl Editor {
 
     #[cfg(test)]
     pub(super) fn reported_line_for_test(&self) -> Option<&str> {
-        self.last_report.as_deref()?.splitn(4, '\n').nth(3)
+        let value = self.last_report.as_deref()?;
+        let rest = value.splitn(4, '\n').nth(3)?;
+        if value.split('\n').nth(1) == Some("utf8+postdisplay") {
+            Some(rest.split_once('\n')?.0)
+        } else {
+            Some(rest)
+        }
     }
 
     #[cfg(test)]
@@ -117,7 +133,7 @@ impl Editor {
     fn report(&mut self, value: &str) -> Option<Snapshot> {
         let revision = self.waiting.pop_front()?;
         let (expected, epoch, action) = self.pending?;
-        if revision != expected || revision != self.revision || value.len() > 4352 {
+        if revision != expected || revision != self.revision || value.len() > 8192 {
             return None;
         }
         let mut fields = value.splitn(4, '\n');
@@ -126,12 +142,23 @@ impl Editor {
         }
         let unit = fields.next()?;
         let position: usize = fields.next()?.trim().parse().ok()?;
-        let line = fields.next()?;
+        let rest = fields.next()?;
+        let (line, native_suffix) = if unit == "utf8+postdisplay" {
+            let (line, suffix) = rest.split_once('\n')?;
+            if suffix.len() > 4096
+                || suffix.chars().any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}'))
+            {
+                return None;
+            }
+            (line, Some(suffix.to_owned()))
+        } else {
+            (rest, None)
+        };
         if line.len() > 4096 || line.chars().any(|c| c.is_control() && c != '\t') {
             return None;
         }
         let cursor = match unit {
-            "utf8" if line.is_char_boundary(position) => position,
+            "utf8" | "utf8+postdisplay" if line.is_char_boundary(position) => position,
             "utf16" => {
                 let mut units = 0;
                 let mut cursor = 0;
@@ -156,7 +183,7 @@ impl Editor {
         } else {
             pebrel_completions::command_context::ShellSyntax::Posix
         };
-        let snapshot = Snapshot { line: line.to_owned(), cursor, syntax, epoch };
+        let snapshot = Snapshot { line: line.to_owned(), cursor, native_suffix, syntax, epoch };
         self.snapshot = Some(snapshot.clone());
         Some(snapshot)
     }
@@ -218,6 +245,17 @@ impl TerminalView {
             self.schedule_ai_prediction(cx);
             if queued == Some(self.prompt_input_epoch) {
                 self.query_completion_editor(cx);
+            }
+        } else if name == "pebrel_editor_hint" {
+            if let Some(owner) = self.completion_editor.owner().map(str::to_owned)
+                && self.suggest.completion_context.owns_current(&owner)
+            {
+                let mut report = Editor::default();
+                report.advertise(&owner);
+                report.begin(self.prompt_input_epoch, Action::Observe);
+                if let Some(snapshot) = report.report(value) {
+                    self.native_prediction_hint_changed(snapshot, cx);
+                }
             }
         } else if name == "pebrel_editor" {
             let owner = value.split('\n').next().unwrap_or_default();
@@ -548,6 +586,41 @@ mod tests {
             [b"\x1b[45~".to_vec()],
             "cached list delivery never types or executes a command"
         );
+    }
+
+    #[test]
+    fn native_trailing_display_report_keeps_suggestion_out_of_real_buffer() {
+        let mut editor = Editor::default();
+        editor.advertise("zsh:coexistence");
+        assert!(editor.begin(1, Action::Observe));
+        let snapshot = editor
+            .report("zsh:coexistence\nutf8+postdisplay\n3\ngit\n status")
+            .expect("native trailing display must remain distinct from BUFFER");
+        assert_eq!(snapshot.line, "git");
+        assert_eq!(snapshot.cursor, 3);
+    }
+
+    #[test]
+    fn native_trailing_display_rejects_unbounded_or_control_text_and_old_peers_remain_valid() {
+        for suffix in [
+            "bad\nextra".to_owned(),
+            "bad\x1b[31m".to_owned(),
+            "bad\u{2028}".to_owned(),
+            "a".repeat(4097),
+        ] {
+            let mut editor = Editor::default();
+            editor.advertise("zsh:coexistence");
+            assert!(editor.begin(1, Action::Observe));
+            assert!(
+                editor
+                    .report(&format!("zsh:coexistence\nutf8+postdisplay\n3\ngit\n{suffix}"))
+                    .is_none()
+            );
+        }
+        let mut editor = Editor::default();
+        editor.advertise("zsh:old");
+        editor.begin(1, Action::Observe);
+        assert_eq!(editor.report("zsh:old\nutf8\n3\ngit").unwrap().native_suffix, None);
     }
 
     #[test]

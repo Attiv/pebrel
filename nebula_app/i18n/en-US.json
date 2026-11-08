@@ -28,8 +28,11 @@
     "save_failed": "Could not save command AI settings: {error}",
     "saved": "Command AI settings saved.",
     "prediction": "AI command completion",
-    "prediction_description": "Optional completion for nonempty input after a pause. Local candidates take priority; suggestions never run automatically.",
-    "predicting": "Predicting a command…"
+    "prediction_description": "Optional: complete after idle, alongside zsh history suggestions. Elsewhere local candidates win. Never executes automatically.",
+    "predicting": "Predicting a command…",
+    "native_history": "zsh history suggestion",
+    "accept_tab": "Parallel suggestions: Tab accepts",
+    "accept_right": "Parallel suggestions: → accepts"
   },
   "prompt_suggestions": {
     "title": "Prompt prediction",

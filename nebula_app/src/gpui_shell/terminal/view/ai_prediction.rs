@@ -4,6 +4,8 @@ use crate::display::{CompletionStyle, NebulaCompletionItem, NebulaCompletionKind
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+mod coexistence;
+
 const IDLE: Duration = Duration::from_millis(500);
 
 #[derive(Clone)]
@@ -25,6 +27,8 @@ pub(super) struct Prediction {
     dismissed: Option<u64>,
     queued: bool,
     sent: bool,
+    manual_source: Option<nebula_settings::CommandAiSource>,
+    accepting_source: Option<nebula_settings::CommandAiSource>,
 }
 
 impl TerminalView {
@@ -43,7 +47,7 @@ impl TerminalView {
             self.completion_editor.invalidate();
             self.editor_query_task = None;
         }
-        if self.ai_prediction.candidate.take().is_some() {
+        if self.ai_prediction.candidate.take().is_some() || self.native_prediction_coexists() {
             self.suggest.clear_completion_hints();
             self.suggest.completion_popup_requested = false;
         }
@@ -118,6 +122,9 @@ impl TerminalView {
             return;
         }
         if self.ai_prediction.verifying {
+            if self.finish_native_prediction_adoption(&snapshot, cx) {
+                return;
+            }
             self.ai_prediction.verifying = false;
             let valid = self.ai_prediction.request.as_ref().is_some_and(|r| r.snapshot == snapshot);
             if valid && let Some(mut item) = self.ai_prediction.candidate.clone() {
@@ -146,6 +153,7 @@ impl TerminalView {
         };
         self.ai_prediction.request = Some(Request { identity, snapshot: snapshot.clone(), shell });
         self.refresh_suggestion_from_snapshot(Some(snapshot.line), self.suggest_anchor, cx);
+        self.present_ai_prediction();
         self.try_ai_prediction(cx);
     }
 
@@ -162,6 +170,9 @@ impl TerminalView {
     }
 
     fn local_prediction_competitor(&self) -> bool {
+        if self.native_prediction_coexists() {
+            return false;
+        }
         !self.suggest.suggestion.is_empty()
             && self
                 .suggest
@@ -222,7 +233,9 @@ impl TerminalView {
                 view.validate_ai_prediction(cx);
                 if !cancelled
                     && view.ai_prediction.request.as_ref().is_some_and(|r| {
-                        r.identity == request.identity && r.snapshot == request.snapshot
+                        r.identity == request.identity
+                            && r.snapshot.line == request.snapshot.line
+                            && r.snapshot.cursor == request.snapshot.cursor
                     })
                     && !view.local_prediction_competitor()
                     && let Ok(Some(suffix)) = result
@@ -251,6 +264,9 @@ impl TerminalView {
     }
 
     pub(super) fn present_ai_prediction(&mut self) {
+        if self.present_native_prediction_choices() {
+            return;
+        }
         let Some(item) = self.ai_prediction.candidate.clone() else {
             return;
         };

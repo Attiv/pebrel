@@ -8,3 +8,4 @@
 
 - 原生 UI 的 Luau 默认值与界面保存优先级见 [脚本默认值](../architecture/notes/nebula_settings/config_defaults/2026-11-02-script-ui-defaults.md)；设置核心不执行脚本。
 - 修改命令 AI 选择、预测开关或备份/重置语义时，先读 [独立命令选择](../architecture/notes/nebula_settings/command_ai/2026-11-06-independent-command-selection.md)。
+- 命令 AI 共存模式的按键来源默认值与旧配置兼容见 [per-key sources](../architecture/notes/nebula_settings/command_ai/2026-11-08-per-key-acceptance-sources.md)。

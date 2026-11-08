@@ -97,6 +97,8 @@ pub fn ui_value_kind(key: &str) -> Option<UiValueKind> {
         | "background_image_fit"
         | "background_image_alignment"
         | "quick_terminal_mode"
+        | "command_ai_tab_source"
+        | "command_ai_right_source"
         | "command_ai_provider_id"
         | "command_ai_model"
         | "quick_terminal_hotkey" => String,

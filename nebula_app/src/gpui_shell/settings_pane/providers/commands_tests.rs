@@ -46,12 +46,37 @@ fn command_ai_save_switch_and_clear_use_rendered_controls(cx: &mut gpui::TestApp
         provider_id: "local".into(),
         model: "fixture-model".into(),
         prediction_enabled: false,
+        ..Default::default()
     };
     assert_eq!(nebula_settings::RuntimeSettings::load().command_ai, expected);
     pane.read_with(window, |pane, cx| {
         assert_eq!(pane.runtime.command_ai, expected);
         assert_eq!(cx.global::<crate::gpui_shell::config::Settings>().command_ai, expected);
         assert!(pane.provider_ui.commands.as_ref().unwrap().saved);
+    });
+    for (selector, keys) in
+        [("command-ai-tab-source", "down down enter"), ("command-ai-right-source", "down enter")]
+    {
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        let trigger = window.debug_bounds(selector).expect("visible acceptance-source dropdown");
+        window.simulate_click(trigger.center(), gpui::Modifiers::default());
+        window.run_until_parked();
+        window.simulate_keystrokes(keys);
+        window.run_until_parked();
+    }
+    window.update(|window, cx| window.draw(cx).clear(cx));
+    let save = window.debug_bounds("command-ai-save").unwrap();
+    window.simulate_click(save.center(), gpui::Modifiers::default());
+    window.run_until_parked();
+    let expected = CommandAi {
+        tab_source: CommandAiSource::History,
+        right_source: CommandAiSource::Ai,
+        ..expected
+    };
+    assert_eq!(nebula_settings::RuntimeSettings::load().command_ai, expected);
+    pane.read_with(window, |pane, cx| {
+        assert_eq!(pane.runtime.command_ai, expected);
+        assert_eq!(cx.global::<crate::gpui_shell::config::Settings>().command_ai, expected);
     });
     for enabled in [true, false] {
         window.update(|window, cx| window.draw(cx).clear(cx));
@@ -77,5 +102,12 @@ fn command_ai_save_switch_and_clear_use_rendered_controls(cx: &mut gpui::TestApp
     let save = window.debug_bounds("command-ai-save").expect("clear selection remains saveable");
     window.simulate_click(save.center(), gpui::Modifiers::default());
     window.run_until_parked();
-    assert_eq!(nebula_settings::RuntimeSettings::load().command_ai, CommandAi::default());
+    assert_eq!(
+        nebula_settings::RuntimeSettings::load().command_ai,
+        CommandAi {
+            tab_source: CommandAiSource::History,
+            right_source: CommandAiSource::Ai,
+            ..CommandAi::default()
+        }
+    );
 }

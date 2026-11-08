@@ -4,6 +4,8 @@
 
 Implemented for explicit in-place command search and opt-in suffix completion through the same prepared inference boundary. Verification below does not establish untested platforms or real-model quality.
 
+Native-zsh source priority and acceptance defaults are partially superseded by [native-history coexistence](2026-11-08-native-history-coexistence.md); the remaining ownership decisions stand.
+
 ## Context
 
 Command generation must use the terminal input location without taking over Shell editing or accidentally sending a natural-language request to the foreground program. Existing AI CLI next-message prediction has different prompts, context and turn ownership. Reusing its whole service would conflate these lifecycles.

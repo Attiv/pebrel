@@ -3,12 +3,14 @@
 use super::*;
 use crate::i18n::Message;
 use gpui_component::menu::PopupMenuItem;
-use nebula_settings::CommandAi;
+use nebula_settings::{CommandAi, CommandAiSource};
 
 pub(super) struct CommandAiSettingsUi {
     provider_id: String,
     model: Entity<InputState>,
     prediction_enabled: bool,
+    tab_source: CommandAiSource,
+    right_source: CommandAiSource,
     error: Option<Message>,
     save_error: Option<String>,
     saved: bool,
@@ -22,7 +24,8 @@ fn available(provider: &AiProvider) -> bool {
 }
 
 fn validation(settings: &CommandAi, providers: &[AiProvider]) -> Option<Message> {
-    if settings == &CommandAi::default() {
+    if settings.provider_id.is_empty() && settings.model.is_empty() && !settings.prediction_enabled
+    {
         return None;
     }
     if !providers.iter().any(|provider| provider.id == settings.provider_id && available(provider))
@@ -64,6 +67,8 @@ impl SettingsPane {
             provider_id: settings.provider_id.clone(),
             model,
             prediction_enabled: settings.prediction_enabled,
+            tab_source: settings.tab_source,
+            right_source: settings.right_source,
             error: None,
             save_error: None,
             saved: false,
@@ -77,6 +82,8 @@ impl SettingsPane {
             provider_id: ui.provider_id.clone(),
             model: ui.model.read(cx).value().trim().to_owned(),
             prediction_enabled: prediction.unwrap_or(ui.prediction_enabled),
+            tab_source: ui.tab_source,
+            right_source: ui.right_source,
         };
         if let Some(error) = validation(&next, &self.provider_store.providers) {
             self.provider_ui.commands.as_mut().unwrap().error = Some(error);
@@ -111,6 +118,63 @@ impl SettingsPane {
             }
         }
         cx.notify();
+    }
+
+    fn command_ai_source_control(&self, tab: bool, cx: &mut Context<Self>) -> gpui::Div {
+        let ui = self.provider_ui.commands.as_ref().unwrap();
+        let language = crate::gpui_shell::config::ui_language(cx);
+        let selected = if tab { ui.tab_source } else { ui.right_source };
+        let owner = cx.entity().downgrade();
+        let button =
+            Button::new(if tab { "command-ai-tab-source" } else { "command-ai-right-source" })
+                .debug_selector(move || {
+                    if tab { "command-ai-tab-source" } else { "command-ai-right-source" }.to_owned()
+                })
+                .label(language.text(if selected == CommandAiSource::Ai {
+                    Message::AiCommandPredictionSource
+                } else {
+                    Message::AiCommandNativeHistory
+                }))
+                .w_full()
+                .h(px(34.0))
+                .map(ProviderSelectTrigger::new)
+                .dropdown_menu(move |mut menu, _, _| {
+                    for source in [CommandAiSource::Ai, CommandAiSource::History] {
+                        let owner = owner.clone();
+                        menu = menu.item(
+                            PopupMenuItem::new(language.text(if source == CommandAiSource::Ai {
+                                Message::AiCommandPredictionSource
+                            } else {
+                                Message::AiCommandNativeHistory
+                            }))
+                            .checked(source == selected)
+                            .on_click(move |_, _, cx| {
+                                let _ = owner.update(cx, |this, cx| {
+                                    if let Some(ui) = this.provider_ui.commands.as_mut() {
+                                        if tab {
+                                            ui.tab_source = source;
+                                        } else {
+                                            ui.right_source = source;
+                                        }
+                                        ui.saved = false;
+                                    }
+                                    cx.notify();
+                                });
+                            }),
+                        );
+                    }
+                    menu
+                });
+        v_flex()
+            .flex_1()
+            .min_w(px(180.0))
+            .gap_1()
+            .child(language.text(if tab {
+                Message::AiCommandAcceptTab
+            } else {
+                Message::AiCommandAcceptRight
+            }))
+            .child(button)
     }
 
     pub(super) fn command_ai_settings(&self, cx: &mut Context<Self>) -> gpui::Div {
@@ -187,6 +251,8 @@ impl SettingsPane {
             provider_id: ui.provider_id.clone(),
             model: model.trim().to_owned(),
             prediction_enabled: ui.prediction_enabled,
+            tab_source: ui.tab_source,
+            right_source: ui.right_source,
         };
         let dirty = draft != self.runtime.command_ai;
         let invalid = validation(&draft, &self.provider_store.providers);
@@ -284,6 +350,15 @@ impl SettingsPane {
                             })),
                     ),
             )
+            .child(
+                h_flex()
+                    .w_full()
+                    .mt_3()
+                    .gap_3()
+                    .flex_wrap()
+                    .child(self.command_ai_source_control(true, cx))
+                    .child(self.command_ai_source_control(false, cx)),
+            )
             .when_some(status, |view, (text, error)| {
                 view.child(
                     div()
@@ -311,6 +386,7 @@ mod tests {
             provider_id: "local".into(),
             model: "fixture".into(),
             prediction_enabled: false,
+            ..CommandAi::default()
         };
         assert_eq!(validation(&configured, &[]), Some(Message::AiCommandChooseProvider));
         let provider = AiProvider::preset(ProviderKind::Ollama, "local");

@@ -47,7 +47,7 @@ pub use notifications::NotificationDuration;
 mod prompt_suggestions;
 pub use prompt_suggestions::PromptSuggestions;
 mod command_ai;
-pub use command_ai::CommandAi;
+pub use command_ai::{CommandAi, CommandAiSource};
 mod quick_terminal;
 mod scrolling;
 pub use scrolling::{

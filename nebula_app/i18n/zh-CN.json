@@ -28,8 +28,11 @@
     "save_failed": "无法保存命令 AI 设置：{error}",
     "saved": "命令 AI 设置已保存。",
     "prediction": "AI 命令补全",
-    "prediction_description": "可选：在非空命令输入停顿后补全，本地候选优先，建议不会自动执行。",
-    "predicting": "正在预测命令…"
+    "prediction_description": "可选：输入停顿后补全，与 zsh 历史提示并列展示；其他场景本地候选优先，不自动执行。",
+    "predicting": "正在预测命令…",
+    "native_history": "zsh 历史提示",
+    "accept_tab": "并列建议：Tab 接受",
+    "accept_right": "并列建议：→ 接受"
   },
   "prompt_suggestions": {
     "title": "提示词预测",

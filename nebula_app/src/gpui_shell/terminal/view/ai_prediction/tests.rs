@@ -14,6 +14,7 @@ fn local(view: &mut TerminalView, cx: &mut Context<TerminalView>) {
         provider_id: "prediction-fixture".into(),
         model: "fixture".into(),
         prediction_enabled: true,
+        ..Default::default()
     };
 }
 
@@ -384,4 +385,192 @@ fn escape_while_http_is_pending_stays_native_without_rearming_prediction(cx: &mu
         [expected, b"x".to_vec()],
         "without a candidate, Escape still reaches the Shell"
     );
+}
+
+fn coexistence(view: &mut TerminalView, cx: &mut Context<TerminalView>, with_ai: bool) {
+    local(view, cx);
+    view.invalidate_ai_prediction();
+    view.prompt_input_epoch += 1;
+    view.ai_prediction.observing = true;
+    assert!(view.observe_completion_editor(cx));
+    view.handle_completion_editor_report(
+        "pebrel_editor",
+        "zsh:prediction\nutf8+postdisplay\n3\ngit\n status",
+        cx,
+    );
+    if with_ai {
+        view.ai_prediction.candidate = Some(NebulaCompletionItem {
+            label: "git status --short".into(),
+            insert: " status --short".into(),
+            replace_chars: 0,
+            replace_after_chars: 0,
+            kind: NebulaCompletionKind::Ai,
+        });
+    }
+    view.present_ai_prediction();
+}
+
+#[gpui::test]
+fn coexistence_keys_select_exact_source_once_without_submission(cx: &mut TestAppContext) {
+    use nebula_settings::CommandAiSource::{Ai, History};
+    let (view, window, receiver) = super::super::startup_tests::open(cx);
+    for tab in [Ai, History] {
+        for right in [Ai, History] {
+            for key in ["tab", "right"] {
+                view.update(window, |view, cx| {
+                    coexistence(view, cx, true);
+                    cx.global_mut::<Settings>().command_ai.tab_source = tab;
+                    cx.global_mut::<Settings>().command_ai.right_source = right;
+                    assert!(view.suggest.suggestion.is_empty(), "Shell owns inline gray text");
+                    assert_eq!(view.suggest.completion_items.len(), 2);
+                    assert!(view.suggest.completion_selected.is_none());
+                    assert!(
+                        !view.local_prediction_competitor(),
+                        "native history does not veto parallel AI"
+                    );
+                });
+                receiver.try_iter().for_each(drop);
+                view.update(window, |view, cx| {
+                    assert!(view.handle_completion_key(key, cx));
+                    view.handle_completion_editor_report(
+                        "pebrel_editor",
+                        "zsh:prediction\nutf8+postdisplay\n3\ngit\n status",
+                        cx,
+                    );
+                });
+                let bytes: Vec<u8> = receiver
+                    .try_iter()
+                    .filter_map(|m| match m {
+                        Msg::Input(b) => Some(b.into_owned()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                let source = if key == "tab" { tab } else { right };
+                let suffix = if source == Ai { " status --short" } else { " status" };
+                assert_eq!(bytes, [b"\x1b[45~".as_slice(), suffix.as_bytes()].concat());
+                assert!(!bytes.contains(&b'\r') && !bytes.contains(&b'\n'));
+            }
+        }
+    }
+}
+
+#[gpui::test]
+fn coexistence_manual_selection_survives_late_ai_and_hint_changes_reject_adoption(
+    cx: &mut TestAppContext,
+) {
+    let (view, window, receiver) = super::super::startup_tests::open(cx);
+    view.update(window, |view, cx| {
+        coexistence(view, cx, false);
+        assert!(view.select_native_prediction_choice(0, cx));
+        view.ai_prediction.candidate = Some(NebulaCompletionItem {
+            label: "git diff".into(),
+            insert: " diff".into(),
+            replace_chars: 0,
+            replace_after_chars: 0,
+            kind: NebulaCompletionKind::Ai,
+        });
+        view.present_ai_prediction();
+        assert_eq!(view.suggest.completion_selected, Some(0));
+        assert!(view.handle_completion_key("tab", cx));
+    });
+    receiver.try_iter().for_each(drop);
+    view.update(window, |view, cx| {
+        view.handle_completion_editor_report(
+            "pebrel_editor",
+            "zsh:prediction\nutf8+postdisplay\n3\ngit\n branch",
+            cx,
+        );
+        assert!(!view.native_prediction_coexists());
+    });
+    assert!(
+        receiver.try_iter().all(|m| !matches!(m, Msg::Input(_))),
+        "changed native suggestion must not be appended"
+    );
+    view.update(window, |view, cx| {
+        coexistence(view, cx, true);
+        assert!(view.select_native_prediction_choice(1, cx));
+        view.handle_completion_editor_report(
+            "pebrel_editor_hint",
+            "zsh:prediction\nutf8+postdisplay\n3\ngit\n branch",
+            cx,
+        );
+        assert_eq!(view.suggest.completion_items[0].label, "git branch");
+        assert_eq!(view.suggest.completion_selected, Some(1));
+        assert!(
+            view.handle_completion_key("right", cx),
+            "manual AI overrides Right's history default"
+        );
+        view.handle_completion_editor_report(
+            "pebrel_editor",
+            "zsh:prediction\nutf8+postdisplay\n3\ngit\n branch",
+            cx,
+        );
+    });
+    let bytes: Vec<u8> = receiver
+        .try_iter()
+        .filter_map(|m| match m {
+            Msg::Input(b) => Some(b.into_owned()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert!(bytes.ends_with(b" status --short"), "{bytes:?}");
+}
+
+#[gpui::test]
+fn coexistence_missing_source_and_enter_preserve_original_shell_keys(cx: &mut TestAppContext) {
+    let (view, window, receiver) = super::super::startup_tests::open(cx);
+    view.update(window, |view, cx| {
+        coexistence(view, cx, false);
+        assert!(
+            !view.handle_completion_key("tab", cx),
+            "AI pending is not permission to accept native history"
+        );
+        assert!(!view.handle_completion_key("enter", cx), "Enter cannot accept either candidate");
+        assert!(view.suggest.completion_items.is_empty());
+        coexistence(view, cx, true);
+        assert!(view.handle_completion_key("escape", cx));
+        view.schedule_ai_prediction(cx);
+        assert!(view.ai_prediction.timer.is_none());
+    });
+    let inputs: Vec<_> = receiver
+        .try_iter()
+        .filter_map(|m| match m {
+            Msg::Input(b) => Some(b.into_owned()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(inputs, [b"\x1b[45~".to_vec(), b"\x1b[45~".to_vec()]);
+}
+
+#[gpui::test]
+fn known_native_suggester_keeps_ai_off_the_input_row_even_before_history_arrives(
+    cx: &mut TestAppContext,
+) {
+    let (view, window, _) = super::super::startup_tests::open(cx);
+    view.update(window, |view, cx| {
+        coexistence(view, cx, true);
+        view.handle_completion_editor_report(
+            "pebrel_editor_hint",
+            "zsh:prediction\nutf8+postdisplay\n3\ngit\n",
+            cx,
+        );
+        assert!(view.native_prediction_coexists());
+        assert!(view.suggest.suggestion.is_empty());
+        assert_eq!(view.suggest.completion_items.len(), 1);
+        assert_eq!(view.suggest.completion_items[0].kind, NebulaCompletionKind::Ai);
+        assert!(view.select_native_prediction_choice(0, cx));
+        view.handle_completion_editor_report(
+            "pebrel_editor_hint",
+            "zsh:prediction\nutf8+postdisplay\n3\ngit\n status",
+            cx,
+        );
+        assert_eq!(
+            view.suggest.completion_selected,
+            Some(1),
+            "late history cannot steal explicit AI selection"
+        );
+        assert!(view.suggest.suggestion.is_empty());
+    });
 }

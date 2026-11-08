@@ -3,7 +3,7 @@ use super::*;
 use crate::display::CompletionStyle;
 use lifecycle::Server;
 
-fn configure(server: &Server) -> Result<(), String> {
+pub(super) fn configure(server: &Server) -> Result<(), String> {
     let mut provider = crate::ai_providers::AiProvider::preset(
         crate::ai_providers::ProviderKind::Ollama,
         "native-loopback",
@@ -16,7 +16,7 @@ fn configure(server: &Server) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-async fn draft(
+pub(super) async fn draft(
     cx: &mut gpui::AsyncApp,
     window: gpui::AnyWindowHandle,
     view: &Entity<TerminalView>,
@@ -65,7 +65,7 @@ async fn search(
     cx.update_window(window, |_, window, cx| key(window, cx, "enter")).map_err(|e| e.to_string())
 }
 
-fn inputs(captured: Vec<serde_json::Value>) -> Vec<String> {
+pub(super) fn inputs(captured: Vec<serde_json::Value>) -> Vec<String> {
     captured
         .iter()
         .map(|body| {

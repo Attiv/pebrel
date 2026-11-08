@@ -246,7 +246,7 @@ impl TerminalView {
         let Some(search) = self.ai_search.as_mut() else { return };
         if search.verifying {
             search.verifying = false;
-            if search.original.as_ref() != Some(&snapshot) {
+            if !search.original.as_ref().is_some_and(|original| original.same_draft(&snapshot)) {
                 search.result = None;
                 search.status = Some(Message::AiCommandSearchStale);
                 cx.notify();
