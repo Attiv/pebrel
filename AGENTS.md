@@ -12,6 +12,7 @@
 - 不得声称仅加入 workflow 或 `CODEOWNERS` 就已启用 GitHub 强制保护；服务端设置及负例 PR 验证须另行获准并核验。
 - `docs/` 记录经过核验的当前事实；非平凡改动的决策、被否定方案和事故因果写入与代码职责同路径的 `architecture/notes/`。遵循 [note 规则](architecture/notes/AGENTS.md)，普通样式修改和单文件修复不写 note。
 - 用户可见的新功能或可见行为变化，必须在**同一改动**内写进 `README.md` 与 `README.zh-CN.md`：按主题归入 `One Workspace` / `一个工作区` 下已有的对应小节（Terminals and Sessions / 终端与会话、Intelligent Completion / 智能补齐、SSH and Files / SSH 与文件、AI CLI Workflows / AI CLI 工作流、A Native, Configurable Interface / 原生、可配置的界面），两侧条目位置与数量保持对应。只写用户看到的效果和前提条件，不写内部模块名、函数名或实现细节；现有小节都放不下时先与维护者确认是否新增小节，不硬塞进相邻小节。纯内部重构、缺陷修复、依赖/构建/CI 改动不写 README。
+- 本地一律不做 Rust 编译与打包：禁止在本机执行 `cargo build/check/test/clippy/run/bench`、`rustc` 或任何会生成 `target/` 的命令，包括把 `CARGO_TARGET_DIR` 指向仓库外的变通做法；构建、测试和安装包统一走 GitHub Actions（`.github/workflows/release.yml` 的 `workflow_dispatch`，或推送 `v*.*.*` tag 触发），产物从 GitHub Release 获取。本地只做不产出构建目录的检查：`cargo fmt --all -- --check`、`scripts/check_architecture.py` 等 Python 门禁、git 与文本处理。同时关闭编辑器 / rust-analyzer 的自动 `cargo check`；发布验证下载的日志、安装包和临时文件一律写到仓库外，不得再写回 `tmp/`。发现 `target/` 重新出现时先查触发来源再清除，不要当成正常缓存保留。
 
 ## 分层入口
 
