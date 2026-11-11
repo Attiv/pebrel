@@ -142,7 +142,11 @@ impl Prepared {
     ) -> Result<String, Failure> {
         self.check_current(cancelled)?;
         let (url, body) = payload(self.client.provider(), purpose, input, os, shell)?;
-        let text = self.client.request(&url, &body, cancelled)?;
+        let lane = match purpose {
+            Purpose::Search => ai_inference::Lane::Explicit,
+            Purpose::Complete => ai_inference::Lane::Background,
+        };
+        let text = self.client.request(lane, &url, &body, cancelled)?;
         self.check_current(cancelled)?;
         Ok(text)
     }

@@ -6,6 +6,9 @@ Implemented integration for verified Claude Code, Pi and OpenCode APIs, with
 Linux desktop product acceptance completed. Codex and Qoder do not yet have an adapter
 that satisfies independent-model access to their running native TUI editor.
 
+Superseded by [explicit inference lane](../ai_inference/2026-11-11-explicit-inference-lane-budget.md)
+for the process-wide slot-admission clause only.
+
 ## Context
 
 The requested first increment predicts one next message after a completed turn,

@@ -61,7 +61,12 @@ fn real_http_keeps_auth_limits_and_no_redirect_contract() {
     let client = PreparedClient::test_with_key(provider(base.clone()), b"fixture-secret");
     assert_eq!(
         client
-            .request(&format!("{base}/chat/completions"), &json!({"input":"safe"}), &cancelled)
+            .request(
+                Lane::Explicit,
+                &format!("{base}/chat/completions"),
+                &json!({"input":"safe"}),
+                &cancelled
+            )
             .unwrap(),
         "result"
     );
@@ -76,18 +81,24 @@ fn real_http_keeps_auth_limits_and_no_redirect_contract() {
         || {},
     );
     let client = PreparedClient::test_with_key(provider(base.clone()), b"fixture-secret");
-    assert_eq!(client.request(&base, &json!({}), &cancelled), Err(Failure::Network));
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &cancelled),
+        Err(Failure::Network)
+    );
     server.join().unwrap();
 
     let (base, server) =
         test_support::reply(json!({"padding":"x".repeat(64 * 1024)}), "200 OK", || {});
     let client = PreparedClient::test_with_key(provider(base.clone()), b"fixture-secret");
-    assert_eq!(client.request(&base, &json!({}), &cancelled), Err(Failure::InvalidResponse));
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &cancelled),
+        Err(Failure::InvalidResponse)
+    );
     server.join().unwrap();
 }
 
 #[test]
-fn cancellation_suppresses_results_and_slots_enforce_the_existing_limit() {
+fn cancellation_suppresses_results_and_explicit_slots_enforce_the_total_cap() {
     let _guard = test_guard();
     let cancelled = std::sync::Arc::new(AtomicBool::new(false));
     let on_request = cancelled.clone();
@@ -95,17 +106,58 @@ fn cancellation_suppresses_results_and_slots_enforce_the_existing_limit() {
         on_request.store(true, Ordering::Release);
     });
     let client = PreparedClient::test_with_key(provider(base.clone()), b"fixture-secret");
-    assert_eq!(client.request(&base, &json!({}), &cancelled), Err(Failure::Cancelled));
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &cancelled),
+        Err(Failure::Cancelled)
+    );
     server.join().unwrap();
-    assert_eq!(client.request(&base, &json!({}), &cancelled), Err(Failure::Cancelled));
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &cancelled),
+        Err(Failure::Cancelled)
+    );
 
-    let first = Slot::acquire().unwrap();
-    let second = Slot::acquire().unwrap();
-    assert!(Slot::acquire().is_none());
-    assert_eq!(client.request(&base, &json!({}), &AtomicBool::new(false)), Err(Failure::Busy));
+    let first = Slot::acquire(Lane::Explicit).unwrap();
+    let second = Slot::acquire(Lane::Explicit).unwrap();
+    assert!(Slot::acquire(Lane::Explicit).is_none());
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &AtomicBool::new(false)),
+        Err(Failure::Busy)
+    );
     drop(first);
-    assert!(Slot::acquire().is_some());
+    assert!(Slot::acquire(Lane::Explicit).is_some());
     drop(second);
+    assert_eq!(ACTIVE.load(Ordering::Acquire), 0);
+}
+
+#[test]
+fn background_predictions_never_displace_an_explicit_request() {
+    let _guard = test_guard();
+    let (base, server) = test_support::reply(complete_response(), "200 OK", || {});
+    let client = PreparedClient::test_with_key(provider(base.clone()), b"fixture-secret");
+
+    // One opportunistic prediction may be in flight, and a second one must not
+    // take the remaining slot that belongs to an explicit user request.
+    let background = Slot::acquire(Lane::Background).unwrap();
+    assert!(Slot::acquire(Lane::Background).is_none());
+    assert_eq!(ACTIVE.load(Ordering::Acquire), BACKGROUND_SLOTS);
+    assert_eq!(
+        client.request(Lane::Background, &base, &json!({}), &AtomicBool::new(false)),
+        Err(Failure::Busy)
+    );
+
+    // The user-initiated search still reaches the network while the prediction
+    // holds its slot; this is the regression that a flat two-slot cap allowed.
+    assert_eq!(
+        client.request(Lane::Explicit, &base, &json!({}), &AtomicBool::new(false)),
+        Ok("result".to_owned())
+    );
+    server.join().unwrap();
+
+    // A later background prediction yields to an in-flight explicit request.
+    let explicit = Slot::acquire(Lane::Explicit).unwrap();
+    assert!(Slot::acquire(Lane::Background).is_none());
+    drop(explicit);
+    drop(background);
     assert_eq!(ACTIVE.load(Ordering::Acquire), 0);
 }
 
@@ -121,7 +173,7 @@ fn invalid_url_never_sends_and_supported_provider_filter_is_unchanged() {
     let client = PreparedClient::test_with_key(provider("https://example.invalid".into()), b"key");
     for url in ["file:///tmp/not-a-request", "https://user:secret@example.invalid/v1"] {
         assert_eq!(
-            client.request(url, &json!({}), &AtomicBool::new(false)),
+            client.request(Lane::Explicit, url, &json!({}), &AtomicBool::new(false)),
             Err(Failure::Unavailable)
         );
     }

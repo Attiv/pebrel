@@ -31,11 +31,30 @@ static CLIENT: LazyLock<ureq::Agent> = LazyLock::new(|| agent(false));
 static LOCAL_CLIENT: LazyLock<ureq::Agent> = LazyLock::new(|| agent(true));
 static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 
+/// Total in-flight requests stay bounded. Opportunistic predictions may hold at
+/// most one slot, so a user-initiated request always has a free slot to take.
+const TOTAL_SLOTS: usize = 2;
+const BACKGROUND_SLOTS: usize = 1;
+
+/// Admission class of a request. Callers declare it; the transport owns the cap.
+/// The wire payload, provider and deadline are identical for both lanes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Lane {
+    /// A user-initiated request, e.g. explicit command search.
+    Explicit,
+    /// An idle-triggered or hook-triggered prediction that may be dropped.
+    Background,
+}
+
 struct Slot;
 impl Slot {
-    fn acquire() -> Option<Self> {
+    fn acquire(lane: Lane) -> Option<Self> {
+        let cap = match lane {
+            Lane::Explicit => TOTAL_SLOTS,
+            Lane::Background => BACKGROUND_SLOTS,
+        };
         ACTIVE
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < 2).then_some(n + 1))
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < cap).then_some(n + 1))
             .ok()?;
         Some(Self)
     }
@@ -90,8 +109,10 @@ impl PreparedClient {
     }
 
     /// Blocking; callers own task lifetime and their purpose-specific freshness checks.
+    /// `lane` selects admission capacity only; it never changes the wire contract.
     pub(crate) fn request(
         &self,
+        lane: Lane,
         url: &str,
         body: &Value,
         cancelled: &AtomicBool,
@@ -99,7 +120,7 @@ impl PreparedClient {
         if cancelled.load(Ordering::Acquire) {
             return Err(Failure::Cancelled);
         }
-        let _slot = Slot::acquire().ok_or(Failure::Busy)?;
+        let _slot = Slot::acquire(lane).ok_or(Failure::Busy)?;
         let uri = url.parse::<ureq::http::Uri>().map_err(|_| Failure::Unavailable)?;
         if !matches!(uri.scheme_str(), Some("http" | "https"))
             || uri.authority().ok_or(Failure::Unavailable)?.as_str().contains('@')
@@ -124,7 +145,8 @@ impl PreparedClient {
             _ if key.is_empty() => request,
             _ => request.header("Authorization", bearer.as_str()),
         };
-        // shortcut: blocking HTTP can only suppress publication until its deadline; use abortable I/O if measured slot contention requires it.
+        // Blocking HTTP cannot be aborted; lane budgeting keeps a slot free for
+        // explicit work instead of widening the cap of non-cancellable requests.
         let mut response = request.send_json(body).map_err(|_| Failure::Network)?;
         if !response.status().is_success() {
             return Err(Failure::Network);

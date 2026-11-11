@@ -33,3 +33,4 @@
 - 内置命令目录与虚拟平台分组的权威归属、旧数据兼容和回滚边界见 [`saved_commands`](../architecture/notes/nebula_app/saved_commands/)。
 - 登录项的启动意图与首窗静默边界见 [`登录启动`](../architecture/notes/nebula_app/platform/startup/2026-10-10-login-launch-intent.md)。
 - 修改命令 AI 的输入归属、推理生命周期或外发上下文时，先读 [`command AI`](../architecture/notes/nebula_app/ai_commands/2026-11-06-native-command-ai-ownership.md)；原生历史与 AI 并列及接受键归属见 [coexistence](../architecture/notes/nebula_app/ai_commands/2026-11-08-native-history-coexistence.md)。
+- 共享推理传输的显式/后台准入分预算、跨能力抢占反例与被否定方案见 [`ai_inference`](../architecture/notes/nebula_app/ai_inference/2026-11-11-explicit-inference-lane-budget.md)；改动 `ai_inference` 的准入、期限或取消语义时一并阅读。

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use super::{INSTRUCTIONS, Message, context, decode};
 pub use crate::ai_inference::Failure;
+use crate::ai_inference::Lane;
 #[cfg(test)]
 use crate::ai_inference::response_text;
 pub use crate::ai_inference::supported;
@@ -46,7 +47,7 @@ impl PreparedClient {
         }
         let (url, body) =
             payload(self.inference.provider(), language, messages).ok_or(Failure::Unavailable)?;
-        let text = self.inference.request(&url, &body, cancelled)?;
+        let text = self.inference.request(Lane::Background, &url, &body, cancelled)?;
         decode(&text).map_err(|_| Failure::InvalidResponse)
     }
 }
