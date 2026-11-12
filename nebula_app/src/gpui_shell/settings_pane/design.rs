@@ -26,6 +26,8 @@ const ROW_PAD_Y: f32 = 12.0;
 const ROW_PAD_Y_COMPACT: f32 = 10.0;
 /// 组与组。
 pub(super) const GROUP_GAP: f32 = 28.0;
+/// 设置行"已修改"状态竖线的宽度。
+const RAIL_W: f32 = 2.0;
 pub(super) const CONTENT_MAX_WIDTH: f32 = 960.0;
 pub(super) const CONTENT_PAD_X: f32 = 32.0;
 pub(super) const CONTENT_PAD_TOP: f32 = 36.0;
@@ -81,7 +83,7 @@ impl SettingsPane {
         control: impl IntoElement,
         cx: &Context<Self>,
     ) -> impl IntoElement {
-        self.row_shell(label, desc.into(), None, RowLayout::Standard, control, cx)
+        self.row_shell(label, desc.into(), None, false, RowLayout::Standard, control, cx)
     }
 
     /// 偏离默认值的设置项常驻显示恢复按钮，恢复后移除。
@@ -138,7 +140,7 @@ impl SettingsPane {
                 .on_click(cx.listener(move |this, _, window, cx| on_reset(this, window, cx)))
                 .into_any_element()
         });
-        self.row_shell(label, desc.into(), reset, layout, control, cx)
+        self.row_shell(label, desc.into(), reset, dirty, layout, control, cx)
     }
 
     /// 行内文字共用中性的悬停反馈。
@@ -192,6 +194,7 @@ impl SettingsPane {
         label: &'static str,
         desc: SettingHelp,
         reset: Option<gpui::AnyElement>,
+        dirty: bool,
         layout: RowLayout,
         control: impl IntoElement,
         cx: &Context<Self>,

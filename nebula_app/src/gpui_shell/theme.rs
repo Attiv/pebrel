@@ -491,6 +491,21 @@ pub fn settings_hairline(cx: &App) -> Hsla {
     wash(Rgba::new(sk.ink.r, sk.ink.g, sk.ink.b, alpha))
 }
 
+/// 设置页"这一项我改过"的标记色。
+///
+/// 不复用 accent：那是给按钮和选中底用的，饱和度是按"要被点"调的。这里只
+/// 需要在一条 2px 的细线上被扫到，高饱和的紫在深底上会发光振动，细元素尤其
+/// 明显——那就是"刺眼"的来源。所以**降饱和、保亮度**：可辨来自亮度差，刺眼
+/// 来自饱和度，两者可以拆开。
+pub fn settings_mark(cx: &App) -> Hsla {
+    if resolved_skin(cx).is_light {
+        // 浅色底上要更暗才看得见，同样压饱和。
+        hsla(250.0 / 360.0, 0.40, 0.47, 1.0)
+    } else {
+        hsla(250.0 / 360.0, 0.36, 0.71, 1.0)
+    }
+}
+
 /// Component focus is an input-modality signal. Pointer clicks already show a
 /// caret, an open menu, or a pressed/selected state, so repeating that state as
 /// a dark outline makes the control look stuck. Keyboard navigation keeps the

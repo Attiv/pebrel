@@ -94,7 +94,6 @@ pub(super) fn execute(
         .run(|| {
             lua.load(
                 r#"
-        local authorize = ...
         local yield, raise = coroutine.yield, error
         local authorize = ...
         return function(method, params)
@@ -108,7 +107,10 @@ pub(super) fn execute(
             .call(authorize)
         })
         .map_err(lua_error)?;
-    let refused = || denied.lock().unwrap_or_else(PoisonError::into_inner).take();
+    // fork 把拒绝状态挂在 Budget 上，由 drive() 在每次 resume 后检查；这里只读取而
+    // 不能 take，否则同一条命令后续的协程检查会丢掉这次拒绝记录。
+    let refusal = budget.denial.clone();
+    let refused = move || refusal.lock().expect("plugin denial owner poisoned").as_ref().cloned();
     let globals = lua.globals();
     // 不留绕过宿主的文件入口，也不让非托管 coroutine 绕过指令分片。
     for name in [

@@ -907,9 +907,9 @@ impl SettingsPane {
                     cx,
                 )
                 .into_any_element(),
-            None => {
-                self.row_shell(label, desc.into(), None, layout, control, cx).into_any_element()
-            },
+            None => self
+                .row_shell(label, desc.into(), None, false, layout, control, cx)
+                .into_any_element(),
         }
     }
 
