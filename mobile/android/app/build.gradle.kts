@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 31
-        versionName = "2.5.1-preview"
+        versionName = "2.5.3-preview"
         providers.gradleProperty("pebrelVersionCode").orNull?.let { versionCode = it.toInt() }
         providers.gradleProperty("pebrelVersionName").orNull?.let { versionName = it }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
