@@ -676,6 +676,7 @@ impl SettingsPane {
             section_fade: super::super::motion::ContentFade::default(),
             agents: agents::AgentSettingsState::new(cx),
             mobile: mobile::MobileState::new(window, cx),
+            plugins: plugins::PluginsState::new(),
             appearance_picker: None,
             appearance_picker_seq: 0,
             shader_picker: None,

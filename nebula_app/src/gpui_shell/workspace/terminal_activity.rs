@@ -143,6 +143,16 @@ impl NebulaWorkspace {
                     );
                 }
             },
+            TerminalViewEvent::ZmodemCancelled => {
+                let text = crate::gpui_shell::config::ui_language(cx)
+                    .text(crate::i18n::Message::TerminalZmodemCancelled);
+                crate::gpui_shell::toast::toast(
+                    window,
+                    cx,
+                    crate::display::ToastKind::Warning,
+                    text,
+                );
+            },
             TerminalViewEvent::Notification(notification) => {
                 if let Some((_, pane_id)) = self.locate_pane(view.entity_id()) {
                     self.deliver_pane_notification(pane_id, notification.clone(), window, cx);
@@ -436,6 +446,27 @@ mod tests {
         assert_spinner_stopped(&workspace, &mut window);
         terminals[0].update(&mut window, |view, cx| {
             feed(view, b"\x1b[?1049l");
+            cx.notify();
+        });
+        draw(&mut window);
+        assert_spinner_running(&workspace, &mut window);
+    }
+
+    #[gpui::test]
+    fn interactive_ssh_paints_no_spinner_or_repeated_frame_demand(cx: &mut TestAppContext) {
+        let (workspace, terminals, _receivers, mut window) = open_painted_workspace(&[1], cx);
+        assert_spinner_running(&workspace, &mut window);
+        // 主屏上的交互式 SSH 登录在等人操作远端 shell（#857）：不画 badge，也不续帧。
+        terminals[0].update(&mut window, |view, cx| {
+            view.runtime_run("ssh user@example.test".into(), cx).unwrap();
+            view.running_program = Some("ssh".into());
+            assert_eq!(view.runtime_task_state(), crate::runtime_api::RuntimeTaskState::Running);
+            cx.notify();
+        });
+        draw(&mut window);
+        assert_spinner_stopped(&workspace, &mut window);
+        terminals[0].update(&mut window, |view, cx| {
+            view.running_program = Some("make".into());
             cx.notify();
         });
         draw(&mut window);

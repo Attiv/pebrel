@@ -277,13 +277,8 @@ impl TerminalView {
 
     /// 应用是否接管了鼠标（vim/htop 等）。Shift 按住时强制旁路——这是
     /// 终端的通用逃生门：应用吃鼠标时用户仍能选择/复制。
-    pub(super) fn mouse_mode_active(
-        &mut self,
-        mods: &gpui::Modifiers,
-        cx: &mut Context<Self>,
-    ) -> bool {
-        self.prepare_terminal_input(cx);
-        self.accepts_input() && !mods.shift && self.term_mode().intersects(TermMode::MOUSE_MODE)
+    pub(super) fn mouse_mode_active(&self, mods: &gpui::Modifiers) -> bool {
+        !mods.shift && self.term_mode().intersects(TermMode::MOUSE_MODE)
     }
 
     /// 把一次鼠标事件按当前协议（SGR/normal/UTF-8）编码上报给应用。
@@ -498,6 +493,7 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         self.shell_pointer.invalidate();
+        self.cancel_pointer_gesture();
         window.focus(&self.focus_handle, cx);
         self.pending_link_open = false;
         cx.emit(TerminalViewEvent::FocusRequested);
@@ -561,13 +557,8 @@ impl TerminalView {
                 return;
             }
         }
-        if self.mouse_mode_active(&event.modifiers, cx) {
-            self.send_mouse_report(
-                event.position,
-                mouse_protocol::BUTTON_LEFT,
-                true,
-                &event.modifiers,
-            );
+        if self.mouse_mode_active(&event.modifiers) {
+            self.begin_application_mouse(event, cx);
             return;
         }
         self.begin_shell_pointer(event);
@@ -605,6 +596,9 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.move_application_mouse(event) {
+            return;
+        }
         self.update_output_hover(event, cx);
         self.update_scrollbar_hover(event.position, cx);
         // Retain the pressed link until release; dragging must not retarget it
@@ -678,7 +672,12 @@ impl TerminalView {
                 return;
             }
         }
-        if self.mouse_mode_active(&event.modifiers, cx) {
+        if self.mouse_mode_active(&event.modifiers) {
+            // A press from another pane, toolbar or a consumed popup click
+            // cannot start an application's drag just by entering its hitbox.
+            if event.pressed_button == Some(MouseButton::Left) {
+                return;
+            }
             self.clear_link_hover(cx);
             // 鼠标模式的移动上报：拖动 = 按钮码+32（需 DRAG 或 MOTION 任一），
             // 无按键纯移动 = 35（仅 MOTION）；同一单元格内的移动不重报。
@@ -719,6 +718,10 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.finish_application_mouse(Some(event)) {
+            cx.stop_propagation();
+            return;
+        }
         if self.finish_completion_popup_scrollbar(event.position, cx) {
             cx.stop_propagation();
             return;
@@ -730,13 +733,7 @@ impl TerminalView {
             return;
         }
         let pending_link_open = std::mem::take(&mut self.pending_link_open);
-        if !pending_link_open && !self.selecting && self.mouse_mode_active(&event.modifiers, cx) {
-            self.send_mouse_report(
-                event.position,
-                mouse_protocol::BUTTON_LEFT,
-                false,
-                &event.modifiers,
-            );
+        if !pending_link_open && !self.selecting {
             return;
         }
         if self.selecting && !pending_link_open {
@@ -766,6 +763,10 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         self.shell_pointer.invalidate();
+        if self.finish_application_mouse(Some(event)) {
+            cx.stop_propagation();
+            return;
+        }
         if self.finish_completion_popup_scrollbar(event.position, cx) {
             cx.stop_propagation();
             return;
@@ -903,7 +904,7 @@ impl TerminalView {
         if self.session.is_none() {
             return;
         }
-        if self.mouse_mode_active(&event.modifiers, cx) && !event.modifiers.control {
+        if self.mouse_mode_active(&event.modifiers) && !event.modifiers.control {
             self.send_mouse_report(
                 event.position,
                 mouse_protocol::BUTTON_RIGHT,
@@ -936,7 +937,7 @@ impl TerminalView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mouse_mode_active(&event.modifiers, cx) && !event.modifiers.control {
+        if self.mouse_mode_active(&event.modifiers) && !event.modifiers.control {
             self.send_mouse_report(
                 event.position,
                 mouse_protocol::BUTTON_RIGHT,
@@ -962,7 +963,7 @@ impl TerminalView {
             cx.stop_propagation();
             return;
         }
-        if self.mouse_mode_active(&event.modifiers, cx) {
+        if self.mouse_mode_active(&event.modifiers) {
             self.send_mouse_report(
                 event.position,
                 mouse_protocol::BUTTON_MIDDLE,
@@ -979,7 +980,7 @@ impl TerminalView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mouse_mode_active(&event.modifiers, cx) {
+        if self.mouse_mode_active(&event.modifiers) {
             self.send_mouse_report(
                 event.position,
                 mouse_protocol::BUTTON_MIDDLE,
@@ -1074,11 +1075,33 @@ impl TerminalView {
             cx.notify();
             return;
         }
-        if accepts
-            && mode.contains(TermMode::ALT_SCREEN)
-            && !term.nebula_shell_input_screen()
-            && mode.contains(TermMode::ALTERNATE_SCROLL)
-        {
+        if mode.contains(TermMode::ALT_SCREEN) && mode.contains(TermMode::ALTERNATE_SCROLL) {
+            // Pi's transcript uses paging keys; arrows edit its input. A saved
+            // conversation is not evidence that Pi still owns the foreground.
+            let agent = self
+                .effective_program_status()
+                .and_then(|status| status.app.as_deref())
+                .map_or_else(
+                    || {
+                        super::runtime::runtime_chat_agent_kind(
+                            self.running_program.as_deref(),
+                            self.command_running_disproved,
+                        )
+                    },
+                    crate::ai_agents::AgentKind::parse,
+                );
+            if let Some(key) = pi_wheel_paging_key(mode, agent, &event.modifiers, lines) {
+                // One page per accumulated wheel event, regardless of line count.
+                let bytes = crate::input::terminal_input::build_runtime_sequence(
+                    key,
+                    Default::default(),
+                    1,
+                    mode,
+                );
+                session.notifier.notify(bytes);
+                cx.notify();
+                return;
+            }
             // 备用屏（less/vim）：滚轮翻译成方向键。
             let seq: &[u8] = if mode.contains(TermMode::APP_CURSOR) {
                 if lines > 0 { b"\x1bOA" } else { b"\x1bOB" }
@@ -1108,6 +1131,27 @@ impl TerminalView {
     }
 }
 
+fn pi_wheel_paging_key(
+    mode: TermMode,
+    agent: Option<crate::ai_agents::AgentKind>,
+    modifiers: &gpui::Modifiers,
+    lines: i32,
+) -> Option<crate::runtime_api::RuntimeKey> {
+    if agent != Some(crate::ai_agents::AgentKind::Pi)
+        || !mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL)
+        || mode.intersects(TermMode::MOUSE_MODE)
+        || *modifiers != gpui::Modifiers::default()
+        || lines == 0
+    {
+        return None;
+    }
+    Some(if lines > 0 {
+        crate::runtime_api::RuntimeKey::PageUp
+    } else {
+        crate::runtime_api::RuntimeKey::PageDown
+    })
+}
+
 /// Preserve fractional deltas across events. Wheel speed must not rescale
 /// pixel-precise trackpad input, font zoom, or completion-list scrolling.
 fn wheel_scroll_lines(
@@ -1133,8 +1177,45 @@ fn wheel_scroll_lines(
 
 #[cfg(test)]
 mod scrolling_tests {
-    use super::wheel_scroll_lines;
+    use super::{pi_wheel_paging_key, wheel_scroll_lines};
     use gpui::{ScrollDelta, point, px};
+
+    #[test]
+    fn pi_wheel_pages_only_without_application_mouse_reporting() {
+        use crate::ai_agents::AgentKind;
+        use crate::runtime_api::RuntimeKey;
+        use nebula_terminal::term::TermMode;
+        let mode = TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL;
+        let modifiers = gpui::Modifiers::default();
+        for (lines, key) in [(1, RuntimeKey::PageUp), (-3, RuntimeKey::PageDown)] {
+            assert_eq!(
+                pi_wheel_paging_key(mode, Some(AgentKind::Pi), &modifiers, lines),
+                Some(key)
+            );
+        }
+        for mode in [
+            TermMode::empty(),
+            TermMode::ALT_SCREEN,
+            TermMode::ALTERNATE_SCROLL,
+            mode | TermMode::MOUSE_REPORT_CLICK,
+            mode | TermMode::MOUSE_DRAG,
+            mode | TermMode::MOUSE_MOTION,
+        ] {
+            assert_eq!(pi_wheel_paging_key(mode, Some(AgentKind::Pi), &modifiers, 1), None);
+        }
+        for agent in [None, Some(AgentKind::Claude), Some(AgentKind::OhMyPi)] {
+            assert_eq!(pi_wheel_paging_key(mode, agent, &modifiers, 1), None);
+        }
+        for modifiers in [
+            gpui::Modifiers { shift: true, ..modifiers },
+            gpui::Modifiers { control: true, ..modifiers },
+            gpui::Modifiers { alt: true, ..modifiers },
+            gpui::Modifiers { platform: true, ..modifiers },
+        ] {
+            assert_eq!(pi_wheel_paging_key(mode, Some(AgentKind::Pi), &modifiers, 1), None);
+        }
+        assert_eq!(pi_wheel_paging_key(mode, Some(AgentKind::Pi), &modifiers, 0), None);
+    }
 
     #[cfg(feature = "gpui-test-support")]
     #[gpui::test]

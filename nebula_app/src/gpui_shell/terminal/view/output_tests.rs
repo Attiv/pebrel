@@ -20,7 +20,7 @@ fn ended_sessions_do_not_send_mouse_or_paste_protocol_input(cx: &mut TestAppCont
             } else {
                 view.process_event(TermEvent::Exit, cx);
             }
-            assert!(!view.mouse_mode_active(&gpui::Modifiers::default(), cx));
+            assert!(!view.mouse_mode_active(&gpui::Modifiers::default()));
             view.send_mouse_report(
                 gpui::point(px(10.0), px(10.0)),
                 0,
@@ -273,4 +273,41 @@ fn optional_forward_warning_keeps_ready_shell_unblocked_and_ignores_stale_stages
     });
     window.run_until_parked();
     assert_eq!(warnings.get(), 1, "late warning cannot replace a failure with success");
+}
+
+/// Issue #806: a remote `rz` left the pane in ZMODEM raw mode with no way out.
+#[gpui::test]
+fn remote_zmodem_offer_is_cancelled_on_the_pty_and_reported_once(cx: &mut TestAppContext) {
+    let (view, window, _) = open(cx);
+    let reported = Rc::new(Cell::new(0));
+    let _subscription = window.update(|_, cx| {
+        let reported = reported.clone();
+        cx.subscribe(&view, move |_, event, _| {
+            if matches!(event, TerminalViewEvent::ZmodemCancelled) {
+                reported.set(reported.get() + 1);
+            }
+        })
+    });
+    view.update(window, |view, cx| {
+        let (session, writes, mut events, proxy) =
+            crate::gpui_shell::terminal::session::test_session_with_events();
+        view.session = Some(session);
+        let mut stream = nebula_terminal::event_loop::StreamProcessor::default();
+        let wire = b"rz waiting to receive.**\x18B0100000023be50\r\x8a\x11";
+        for chunk in wire.chunks(7) {
+            stream.feed(&mut view.session.as_ref().unwrap().term.lock(), &proxy, chunk);
+        }
+        while let Ok(event) = events.try_recv() {
+            view.process_event(event, cx);
+        }
+        let written: Vec<u8> = writes
+            .try_iter()
+            .flat_map(|msg| match msg {
+                Msg::Input(bytes) => bytes.into_owned(),
+                _ => Vec::new(),
+            })
+            .collect();
+        assert_eq!(written, nebula_terminal::zmodem::ABORT_SEQUENCE.as_bytes());
+    });
+    assert_eq!(reported.get(), 1);
 }

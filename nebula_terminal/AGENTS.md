@@ -10,5 +10,6 @@
 - 原生 trailing-display 的有界协议与 zsh 异步建议通知见 [native trailing display](../architecture/notes/nebula_terminal/tty/2026-11-08-native-trailing-display.md)。
 - 重大协议、缓冲、线程、所有权或兼容性决策写入 `architecture/notes/nebula_terminal/<capability>/`；普通回归修复只需测试和变更说明。
 - 快照中的 DIM 与反色颜色归属见 [`render`](../architecture/notes/nebula_terminal/render/)；颜色保持未解析，前端统一处理调色板和 OSC 覆盖。
+- ZMODEM（rz/sz）只做识别并自动取消，不实现传输；依据见 [`zmodem`](../architecture/notes/nebula_terminal/zmodem/2026-11-05-cancel-unsupported-zmodem.md)。
 - OSC 7501 记录、PTY 生命周期和 GPUI 投影的边界见 [`program_status`](../architecture/notes/nebula_terminal/program_status/)。
 - 有界输出载荷、命令捕获与网格标记的所有权见 [`inline_content`](../architecture/notes/nebula_terminal/inline_content/2026-10-21-bounded-output-store.md)；前端分类命令，核心不解释 MIME 正文。

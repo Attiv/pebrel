@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pebrel.com"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-pebrel.com-2f81f7?style=flat-square&logo=googlechrome&logoColor=white" alt="官网：pebrel.com" /></a>
   <img src="https://img.shields.io/github/stars/Kuddev/pebrel?style=flat-square&color=ffd33d&logo=github" alt="Stars" />
   <a href="https://atomgit.com/kettys/pebrel"><img src="https://atomgit.com/kettys/pebrel/star/badge.svg" alt="AtomGitStars" /></a>
   <a href="https://hub.xerj.org/contributors/Kuddev"><img src="https://hub.xerj.org/contributors/Kuddev/badge.svg" alt="XERJ Corpus Hub contributor" /></a>
@@ -28,7 +29,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <strong>简体中文</strong>
+  <a href="README.md">English</a> · <strong>简体中文</strong> · <a href="README.ja.md">日本語</a>
 </p>
 
 ---
@@ -79,11 +80,11 @@
 </p>
 
 <p align="center">
-  <a href="extra/community/wechat-group-2026-11-04.jpg"><img src="extra/community/wechat-group-2026-11-04.jpg" alt="Pebrel 微信交流群二维码，2026 年 11 月 4 日前有效" width="300" /></a>
+  <a href="extra/community/wechat-group-2026-11-11.jpg"><img src="extra/community/wechat-group-2026-11-11.jpg" alt="Pebrel 微信交流群二维码，2026 年 11 月 11 日前有效" width="300" /></a>
 </p>
 
 <p align="center">
-  微信扫码加入，2026 年 11 月 4 日前有效。点击图片可查看原图。
+  微信扫码加入，2026 年 11 月 11 日前有效。点击图片可查看原图。
 </p>
 
 ## 一个工作区
@@ -150,6 +151,10 @@ Tab/→ 沿用当前补齐模式，Esc 隐藏预测，仍需单独按 Enter 执�
 在已集成的本地 zsh 历史提示中，保留 Shell 原生灰字，并在独立列表同时查看历史与 AI 候选。
 命令 AI 设置可分别选择 Tab、→ 接受哪个来源（默认分别为 AI、历史）；点击或用 ↑/↓ 选择候选后，
 两个接受键均以手选结果为准，采用不会执行。原生历史提示仅在本地使用，不发送给模型；并列模式下即使已有历史候选，也会请求 AI。
+
+Pebrel 能查询窗格的文件系统时，`nvim`、`code` 和 `cat` 的文件参数从当前目录获取候选，
+历史只给已发现的候选排序。需要在多个文件间选择时，选用**混合补齐**：
+Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执行命令；→ 直接接受灰字。
 
 <details>
 <summary>历史补齐有什么不同？</summary>

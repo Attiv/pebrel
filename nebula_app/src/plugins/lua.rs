@@ -96,6 +96,7 @@ pub(super) fn execute(
                 r#"
         local authorize = ...
         local yield, raise = coroutine.yield, error
+        local authorize = ...
         return function(method, params)
             authorize(method)
             local ok, result = yield('pebrel.runtime.request', method, params or {})
@@ -107,6 +108,7 @@ pub(super) fn execute(
             .call(authorize)
         })
         .map_err(lua_error)?;
+    let refused = || denied.lock().unwrap_or_else(PoisonError::into_inner).take();
     let globals = lua.globals();
     // 不留绕过宿主的文件入口，也不让非托管 coroutine 绕过指令分片。
     for name in [
@@ -132,7 +134,11 @@ pub(super) fn execute(
         .set_name(package.manifest.entry.as_deref().unwrap_or("plugin"))
         .into_function()
         .map_err(lua_error)?;
-    let exports = drive(&lua, entry, MultiValue::new(), package, &mut budget, call)?;
+    let exports = drive(&lua, entry, MultiValue::new(), package, &mut budget, call);
+    let exports = match refused() {
+        Some(error) => return Err(error),
+        None => exports?,
+    };
     let LuaValue::Table(exports) = exports else {
         return Err(Error::new(
             "invalid_luau_entry",
@@ -162,7 +168,11 @@ pub(super) fn execute(
         .map_err(lua_error)?;
     let arguments = lua.to_value(&arguments).map_err(lua_error)?;
     let args = MultiValue::from_vec(vec![LuaValue::Table(context), arguments]);
-    let result = drive(&lua, function, args, package, &mut budget, call)?;
+    let result = drive(&lua, function, args, package, &mut budget, call);
+    let result = match refused() {
+        Some(error) => return Err(error),
+        None => result?,
+    };
     let result = json::from_lua(&lua, result)?;
     Ok(Execution {
         result,
