@@ -278,7 +278,7 @@ impl TerminalView {
     /// 应用是否接管了鼠标（vim/htop 等）。Shift 按住时强制旁路——这是
     /// 终端的通用逃生门：应用吃鼠标时用户仍能选择/复制。
     pub(super) fn mouse_mode_active(&self, mods: &gpui::Modifiers) -> bool {
-        !mods.shift && self.term_mode().intersects(TermMode::MOUSE_MODE)
+        self.accepts_input() && !mods.shift && self.term_mode().intersects(TermMode::MOUSE_MODE)
     }
 
     /// 把一次鼠标事件按当前协议（SGR/normal/UTF-8）编码上报给应用。

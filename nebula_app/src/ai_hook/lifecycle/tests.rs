@@ -15,11 +15,7 @@ fn event(source: &str, session: &str, name: &str) -> AiHookEvent {
             "SessionEnd" => "session-end",
             _ => panic!("unknown fixture event {name}"),
         };
-        let mut payload = serde_json::json!({"kind":kind, "session_id":session});
-        if source == "opencode" && name == "Stop" {
-            payload["outcome"] = "succeeded".into();
-        }
-        payload
+        serde_json::json!({"kind":kind, "session_id":session})
     } else {
         serde_json::json!({"hook_event_name":name, "session_id":session})
     };
