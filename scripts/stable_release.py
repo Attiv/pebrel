@@ -61,10 +61,10 @@ def expected_asset_names(version: str) -> tuple[str, ...]:
     if version_parts < (1, 7, 0):
         names += (f"NebulaTerminal-{version}-windows-x64-setup.exe",)
     # These explicitly scoped fork releases are Windows/macOS only; other manifests stay unchanged.
-    if version_parts in ((2, 4, 0), (2, 5, 0), (2, 5, 1), (2, 5, 3)):
+    if version_parts in ((2, 4, 0), (2, 5, 0), (2, 5, 1), (2, 5, 3), (2, 5, 6)):
         names = tuple(name for name in names if "-windows-" in name or "-macos-" in name)
-    # 2.5.1 and the upstream-aligned 2.5.3 fork release ship Apple Silicon only.
-    if version_parts in ((2, 5, 1), (2, 5, 3)):
+    # These upstream-aligned fork releases ship Apple Silicon only.
+    if version_parts in ((2, 5, 1), (2, 5, 3), (2, 5, 6)):
         names = tuple(name for name in names if "-macos-x64-" not in name)
     return names
 

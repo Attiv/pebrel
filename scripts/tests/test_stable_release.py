@@ -433,6 +433,24 @@ class StableReleaseTests(unittest.TestCase):
                 self.assertEqual(len(names), 11)
                 self.assertTrue(any("-linux-" in name for name in names))
 
+    def test_256_scope_matches_the_arm_only_fork_manifest(self) -> None:
+        version = "2.5.6"
+        expected = (
+            f"Pebrel-v{version}-macos-arm64-preview.dmg",
+            f"Pebrel-v{version}-windows-x64.zip",
+            f"Pebrel-v{version}-windows-x64-setup.exe",
+            f"Pebrel-v{version}-windows-arm64.zip",
+            f"Pebrel-v{version}-windows-arm64-setup.exe",
+        )
+        self.assertEqual(expected_asset_names(version), expected)
+        from scripts.stable_release import macos_package_matrix
+        self.assertEqual([row["runner"] for row in macos_package_matrix(version)], ["macos-26"])
+        for ordinary in ("2.5.2", "2.6.0"):
+            with self.subTest(ordinary=ordinary):
+                names = expected_asset_names(ordinary)
+                self.assertEqual(len(names), 11)
+                self.assertTrue(any("-linux-" in name for name in names))
+
     def test_stable_workflow_exports_and_consumes_manifest_macos_matrix(self) -> None:
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text(encoding="utf-8")
         prepare = workflow.split("\n  prepare:\n", 1)[1].split("\n  linux:\n", 1)[0]
