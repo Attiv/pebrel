@@ -255,6 +255,9 @@ discover candidates from the current environment without matching prior commands
 - Searchable settings, a command palette, and Luau configuration with validation and
   live reload. Legacy `.lua` filenames are accepted using Luau syntax/libraries,
   not full Lua 5.4 compatibility; existing TOML configuration remains supported.
+- Rename saved command groups from the pencil button on the group row. Built-in and
+  ungrouped entries cannot be renamed, and duplicate or invalid names are rejected
+  without moving the commands already inside the group.
 - Configure native font, tab/sidebar, opacity and pane defaults in `pebrel.luau`.
   Saved Settings values take priority, and script changes require a restart.
 - Use GLSL (`.glsl`/`.frag`) or WGSL background/terminal effects with configured

@@ -4,6 +4,50 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.5.7 - 2026-11-13
+
+### English
+
+This fork release aligns its package version with upstream Pebrel 2.5.7 and integrates the latest upstream main branch, while keeping the fork's own features. AI command completion remains off by default, and explicit AI commands keep priority over background predictions.
+
+This customized fork release provides Windows x64/ARM64 installers and portable ZIPs plus a macOS Apple Silicon DMG. macOS retains its Preview label and ad-hoc signing; these packages are not notarized. macOS Intel, Linux, Android and relay packages are outside this release's scope.
+
+#### Added
+
+- Rename saved command groups from the pencil button on the group row. Built-in and ungrouped entries cannot be renamed, duplicate or invalid names are rejected, and the commands already inside a group keep their membership and order. This comes from the upstream main branch.
+
+#### Fixed
+
+- Kept the fork's guarded group deletion in the command palette while merging upstream: virtual platform catalogues and unknown system groups still offer no delete action, while the shared built-in folder still clears its commands.
+
+### 中文
+
+本定制分支把包版本对齐到上游 Pebrel 2.5.7，并整合了上游 main 分支的最新代码，同时保留 fork 自有功能。AI 命令补全仍默认关闭，显式 AI 命令优先于后台预测。
+
+本定制分支提供 Windows x64/ARM64 安装器与便携 ZIP，以及 macOS Apple Silicon DMG。macOS 保留 Preview 标识和 ad-hoc 签名，未进行公证。本次不发布 macOS Intel、Linux、Android 或 relay 包。
+
+#### 新增
+
+- 命令面板的分组行新增铅笔按钮，可重命名已保存的命令组。内置分组与未分组条目不能改名，重复或非法名称会被拒绝，组内已有命令的归属与顺序保持不变。该功能来自上游 main 分支。
+
+#### 修复
+
+- 合并上游代码时保留了 fork 的命令组删除限制：虚拟平台分组与未知系统分组仍不提供删除操作，共享的内置分组仍可清空其中的命令。
+
+### Contributors
+
+Release preparation by [Attiv](https://github.com/Attiv).
+
+发布准备：[Attiv](https://github.com/Attiv)。
+
+### SHA256
+
+- `Pebrel-v2.5.7-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.7-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.7-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.7-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.7-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+
 ## 2.5.6 - 2026-11-13
 
 ### English
