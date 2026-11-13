@@ -116,11 +116,11 @@ cargo test -p nebula --test i18n_contract --release -- --ignored --nocapture
 
 The allocation contract checks both the first and repeated lookup across every
 language. The timing benchmark is informational, not a machine-dependent CI speed
-threshold. The initial translated UTF-8 payload has a 256 KiB budget; string table
+threshold. The initial translated UTF-8 payload has a 288 KiB budget; string table
 pointers and generated code are additional binary overhead, not included in that count.
 
 零分配测试覆盖首次与重复查词；微基准只报告实测值，不把某台机器的耗时写死成 CI 阈值。
-初版 UTF-8 翻译文本预算为 256 KiB；指针表与生成代码是额外开销，不冒充完整二进制体积。
+初版 UTF-8 翻译文本预算为 288 KiB；指针表与生成代码是额外开销，不冒充完整二进制体积。
 
 The independent contract workspace compiles the production generator and lookup
 files without renderer dependencies. The `architecture-contracts` PR job executes
