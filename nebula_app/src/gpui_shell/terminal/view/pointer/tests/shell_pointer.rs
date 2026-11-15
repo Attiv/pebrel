@@ -22,6 +22,11 @@ fn wire(argument: usize) -> Vec<u8> {
 }
 
 fn report(view: &mut TerminalView, name: &str, value: &str, cx: &mut Context<TerminalView>) {
+    // These fixtures assert the edit bytes, not wall-clock expiry; a slow draw
+    // on a loaded CI runner must not make a valid reply look stale.
+    if name == "pebrel_pointer" {
+        view.refresh_pending_shell_pointer_reply();
+    }
     view.process_event(TermEvent::UserVar { name: name.into(), value: value.into() }, cx);
 }
 

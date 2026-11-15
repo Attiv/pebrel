@@ -183,6 +183,16 @@ impl TerminalView {
         self.write_bytes(self.shell_pointer_command(nonce));
     }
 
+    /// 功能测试同步驱动视图、断言编辑字节，不应因为 CI 绘制变慢而被「回复超过
+    /// 一秒」的保护误判。过期回复的生产语义由 `tests.rs` 中刻意构造的过期请求
+    /// 单独覆盖，这里只把当前 pending 请求的有效期重新对齐到测试发起回复的时刻。
+    #[cfg(test)]
+    pub(super) fn refresh_pending_shell_pointer_reply(&mut self) {
+        if let Some(request) = self.shell_pointer.pending.as_mut() {
+            request.created = Instant::now();
+        }
+    }
+
     pub(super) fn observe_shell_pointer(
         &mut self,
         name: &str,
