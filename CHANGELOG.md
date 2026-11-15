@@ -4,6 +4,46 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.5.8 - 2026-11-15
+
+### English
+
+This fork release aligns its package version with upstream Pebrel 2.5.8 and integrates the latest upstream main branch, while keeping the fork's own features. AI command completion remains off by default, and explicit AI commands keep priority over background predictions.
+
+This customized fork release provides Windows x64/ARM64 installers and portable ZIPs plus a macOS Apple Silicon DMG. macOS retains its Preview label and ad-hoc signing; these packages are not notarized. macOS Intel, Linux, Android and relay packages are outside this release's scope.
+
+#### Fixed
+
+- Fixed built-in command palette labels showing Chinese while the rest of the interface is set to English.
+- Fixed repeated disk writes during frequent agent events when the session details have not changed.
+- Fixed prompt clicks in older remote Bash sessions by falling back to the positioning path those shells support.
+
+### 中文
+
+本定制分支把包版本对齐到上游 Pebrel 2.5.8，并整合了上游 main 分支的最新代码，同时保留 fork 自有功能。AI 命令补全仍默认关闭，显式 AI 命令优先于后台预测。
+
+本定制分支提供 Windows x64/ARM64 安装器与便携 ZIP，以及 macOS Apple Silicon DMG。macOS 保留 Preview 标识和 ad-hoc 签名，未进行公证。本次不发布 macOS Intel、Linux、Android 或 relay 包。
+
+#### 修复
+
+- 修复界面已选英文时，命令面板的内置命令仍显示中文的问题。
+- 修复助手频繁上报事件、但会话信息未发生变化时反复写盘的问题。
+- 修复老版本远程 Bash 会话中的提示符点击，改为回退到这些 Shell 支持的定位方式。
+
+### Contributors
+
+Release preparation by [Attiv](https://github.com/Attiv).
+
+发布准备：[Attiv](https://github.com/Attiv)。
+
+### SHA256
+
+- `Pebrel-v2.5.8-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.8-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.8-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.8-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.8-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+
 ## 2.5.7 - 2026-11-13
 
 ### English
