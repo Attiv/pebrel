@@ -63,7 +63,7 @@ pub struct EventProxy {
 impl EventProxy {
     fn channel(
         automatic_command_views: Arc<AtomicBool>,
-    ) -> (Self, super::event_mailbox::EventReceiver, UnboundedReceiver<crate::ssh_session::SshStage>)
+    ) -> (Self, super::event_mailbox::EventReceiver, UnboundedReceiver<crate::ssh_session::SshEvent>)
     {
         let (events, receiver) = super::event_mailbox::channel();
         let (stages, stage_receiver) = unbounded();
