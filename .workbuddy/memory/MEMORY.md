@@ -26,3 +26,20 @@
 - 要关闭 rust-analyzer 自动 check；发布验证产物写仓库外，不再写 `tmp/`。
 - 背景：2026-11-11 仓库达 60 GB，其中 57 GB 是 `target/` 多套 profile 与
   增量缓存；清理后降到 197 MB。安装包备份在 `~/pebrel-release-artifacts-20261111/`。
+
+## 工作区已改名为 pebrel_*（2026-11-16 随上游合并确立）
+
+- 上游把 crate 与目录从 `nebula_*` 改为 `pebrel_*`：`pebrel_app`、`pebrel_terminal`、
+  `pebrel_config`、`pebrel_config_derive`、`pebrel_settings`、`pebrel_split`、
+  `pebrel-completions`、`pebrel_gpui`、`pebrel_hook`；app 包名由 `nebula` 改为 `pebrel`。
+- 只改 crate/目录名，**内部标识符没改**：`nebula_settings.txt`、`NebulaWorkspace` 等
+  仍是原名；`-p nebula` 只出现在 release.yml 的旧源码兼容分支。
+- 说明文档镜像到 `architecture/notes/pebrel_*`；`architecture/notes/nebula_app/math/`
+  是上游唯一保留在旧目录的一篇。
+- `.config/nextest.toml` 的串行名单顺序被 `test_ci_native_tests.py` 逐字锁定，
+  合并冲突时不要只做集合并集。
+- 改名要扫到**打包入口与测试断言**：`grep -rn "\-p nebula\|'nebula,\|nebula/gpui-shell"`
+  over `scripts/`、`.github/workflows/`。本轮两次红都是这类残留
+  （`scripts/tests/build-windows-product.tests.ps1`、`scripts/package-macos-intel.sh`）。
+- 本机无 `pwsh`，PowerShell 测试只能在 Windows runner 上验证；合并后靠读脚本
+  比对 `-p` / `--bin` / `--features` 参数清单做静态判定。
