@@ -96,6 +96,10 @@ each agent's activity, and read its output without leaving the application.
 ### Terminals and Sessions
 
 - Sidebar or top tabs, draggable split panes, and per-pane working directories.
+- Optional tab titles keep the local directory or SSH host instead of the AI task
+  name; hovering a tab still reveals the current task.
+- Automatic command output views can be switched off. Matched output then keeps the
+  terminal's own colors and layout, and views opened by hand still work.
 - Saved workspace layouts and optional AI conversation restoration. On WSL and
   Linux, Codex session metadata can supply an ID when its hook has not reported one.
 - Native Windows Codex identity refreshes share a background helper with startup

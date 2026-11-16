@@ -4,6 +4,74 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.5.9 - 2026-11-16
+
+### English
+
+This fork release aligns its package version with upstream Pebrel 2.5.9 and integrates the latest upstream main branch, where the workspace crates and their directories are renamed from `nebula_*` to `pebrel_*`. Fork features are preserved: AI command completion remains off by default, and explicit AI commands keep priority over background predictions.
+
+This customized fork release provides Windows x64/ARM64 installers and portable ZIPs plus a macOS Apple Silicon DMG. macOS retains its Preview label and ad-hoc signing; these packages are not notarized. macOS Intel, Linux, Android and relay packages are outside this release's scope.
+
+#### Added
+
+- Added an option to keep the local directory or SSH host in tab titles. Hovering a tab still shows the current AI task.
+- Added a switch that turns automatic command output views off. Matched output then keeps the terminal's own colors and layout, and views opened by hand still work.
+
+#### Fixed
+
+- Fixed panes losing their output when a command produced no text.
+- Fixed directional pane focus being lost after leaving a zoomed pane.
+- Fixed LaTeX underbraces not stretching across their expression.
+- Fixed formula parsing failing on Unicode control symbols.
+- Fixed terminal cell size queries going unanswered at PTY startup and after a resize.
+- Fixed macOS agent hook sockets truncating a delayed message.
+- Fixed terminal focus not returning when automatic command results are hidden.
+- Fixed portable Windows copies not being offered the matching ZIP update.
+
+#### Improved
+
+- Improved stored data naming: new files use Pebrel names while the previous Nebula names are still read, and adopting legacy files preserves current data.
+
+### 中文
+
+本定制分支把包版本对齐到上游 Pebrel 2.5.9，并整合了上游 main 分支的最新代码，其中工作区各 crate 及其目录由 `nebula_*` 改名为 `pebrel_*`。fork 自有功能全部保留：AI 命令补全仍默认关闭，显式 AI 命令优先于后台预测。
+
+本定制分支提供 Windows x64/ARM64 安装器与便携 ZIP，以及 macOS Apple Silicon DMG。macOS 保留 Preview 标识和 ad-hoc 签名，未进行公证。本次不发布 macOS Intel、Linux、Android 或 relay 包。
+
+#### 新增
+
+- 新增标签标题选项，可保留本地目录名或 SSH 主机名；悬停标签仍可查看当前 AI 任务。
+- 新增关闭命令输出自动视图的开关。关闭后匹配的输出保留终端原有颜色与排版，手动打开的视图仍然可用。
+
+#### 修复
+
+- 修复命令没有文本输出时窗格不保留任何输出的问题。
+- 修复离开缩放窗格后方向键焦点丢失的问题。
+- 修复 LaTeX 下花括号未跨整个表达式的问题。
+- 修复公式解析遇到 Unicode 控制符号会失败的问题。
+- 修复终端单元格尺寸查询在 PTY 启动与调整窗口后没有回答的问题。
+- 修复 macOS 上 Agent hook 套接字截断延迟消息的问题。
+- 修复隐藏命令输出自动结果后焦点未回到终端的问题。
+- 修复便携版 Windows 副本未获得匹配 ZIP 更新包的问题。
+
+#### 改进
+
+- 改进存储数据命名：新文件使用 Pebrel 名称，同时仍读取旧的 Nebula 名称，迁移旧文件时保留当前数据。
+
+### Contributors
+
+Release preparation by [Attiv](https://github.com/Attiv).
+
+发布准备：[Attiv](https://github.com/Attiv)。
+
+### SHA256
+
+- `Pebrel-v2.5.9-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.9-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.9-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.9-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.5.9-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+
 ## 2.5.8 - 2026-11-15
 
 ### English
