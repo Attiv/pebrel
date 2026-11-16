@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-11-09T11:53:01.620755+00:00",
+  "nodes": {
+    "nebula_app_src_ai_hook_integrations_executable_directories": {
+      "code_fingerprint": "e2d6651da456ed64b3094d0ffc924ad8922bfbbb314ab92b6b1e13835dd868a1",
+      "label": "executable_directories()",
+      "last": "2026-11-09T11:23:46.872725+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T11:23:46.872725+00:00",
+          "outcome": "useful",
+          "q": "agent 设置里 claude code 和 codex 已安装却未检测到，Hook 不能点击"
+        }
+      ],
+      "score": 0.999530859,
+      "source_file": "nebula_app/src/ai_hook/integrations.rs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "nebula_app_src_ai_hook_integrations_find_executable": {
+      "code_fingerprint": "e2d6651da456ed64b3094d0ffc924ad8922bfbbb314ab92b6b1e13835dd868a1",
+      "label": "find_executable()",
+      "last": "2026-11-09T11:23:46.872725+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T11:23:46.872725+00:00",
+          "outcome": "useful",
+          "q": "agent 设置里 claude code 和 codex 已安装却未检测到，Hook 不能点击"
+        }
+      ],
+      "score": 0.999530859,
+      "source_file": "nebula_app/src/ai_hook/integrations.rs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "nebula_app_src_gpui_shell_settings_pane_agents_can_toggle": {
+      "code_fingerprint": "86bbeda72c2fee918c073c526b71d629f181a8b831f07503ec1761808bb33650",
+      "label": "can_toggle()",
+      "last": "2026-11-09T11:23:46.872725+00:00",
+      "provenance": [
+        {
+          "date": "2026-11-09T11:23:46.872725+00:00",
+          "outcome": "useful",
+          "q": "agent 设置里 claude code 和 codex 已安装却未检测到，Hook 不能点击"
+        }
+      ],
+      "score": 0.999530859,
+      "source_file": "nebula_app/src/gpui_shell/settings_pane/agents.rs",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}

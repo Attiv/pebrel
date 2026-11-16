@@ -1,0 +1,1 @@
+{"excludes": ["third_party/**", ".trellis/**", ".agents/**", ".claude/**", ".codex/**", "tmp/**", "graphify-out/**"], "gitignore": true, "code_only": true}
