@@ -174,8 +174,8 @@ if [[ $skip_build -eq 0 ]]; then
   if [[ -n "$jobs" ]]; then
     build_command+=(--jobs "$jobs")
   fi
-  build_command+=(-p nebula --bin pebrel -p nebula_hook --bin pebrel-hook
-                  --features nebula/gpui-shell)
+  build_command+=(-p pebrel --bin pebrel -p pebrel_hook --bin pebrel-hook
+                  --features pebrel/gpui-shell)
   echo "==> Building Pebrel $version for Intel macOS ($host_arch host)"
   "${build_command[@]}"
 elif [[ ! -x "$binary" || ! -x "$(dirname "$binary")/pebrel-hook" ]]; then
