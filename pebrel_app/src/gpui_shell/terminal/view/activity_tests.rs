@@ -555,7 +555,7 @@ fn omp_message_redraw_keeps_its_session_until_the_process_exits(cx: &mut TestApp
             child_present: false,
             busy: false,
         };
-        view.apply_activity_evidence(view.command_started, 4242, Some(100), Ok(gone), cx);
+        view.apply_activity_evidence(view.command_started, 4242, Some(100), None, Ok(gone), cx);
         assert!(view.ai_session.is_none());
         assert!(view.running_program.is_none());
         assert!(!view.agent_activity.hook_seen());
