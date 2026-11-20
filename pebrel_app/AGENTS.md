@@ -31,6 +31,7 @@
 - 新终端代理保持选定协议，不把 SOCKS 改写成 HTTP。见 [`terminal proxy scheme`](../architecture/notes/pebrel_app/ssh_proxy/2026-09-29-terminal-proxy-scheme.md)。
 - 新终端的绕过列表写成 curl 的 `no_proxy`，`socks5h` 按原样保存。见 [`terminal proxy bypass`](../architecture/notes/pebrel_app/ssh_proxy/2026-09-30-terminal-proxy-bypass.md)。
 - WSL pane 的发行版快照与分屏/新标签继承见 [`shell_detect`](../architecture/notes/pebrel_app/shell_detect/)；WSL zsh 启动注入见 [`platform`](../architecture/notes/pebrel_app/platform/2026-09-28-wsl-zsh-startup-integration.md)。
+- OMP 本机恢复时的标题记录、会话文件校验与旧 ID 回退见 [原生文件恢复](../architecture/notes/pebrel_app/platform/pi_session/)。消息重绘对前台身份的影响见 [OMP 提示区](../architecture/notes/pebrel_app/gpui_shell/terminal/view/2026-11-19-omp-prompt-zones.md)。
 - Windows Codex 身份探测复用进程级辅助进程；光标提示、私有管道、请求期限和退出回收见 [`探测进程生命周期`](../architecture/notes/pebrel_app/platform/ai_session_identity/windows/2026-10-23-reusable-probe-process.md)。
 - SSH Files 的 pane cwd 跟随、手动浏览快照与取消归属见 [`remote_files`](../architecture/notes/pebrel_app/gpui_shell/workspace/remote_files/)。
 - 管理员更新的受保护目录与会话恢复分别见 [`update_installation`](../architecture/notes/pebrel_app/platform/update_installation/) 和 [`update_download`](../architecture/notes/pebrel_app/update_download/)，普通会话与管理员更新状态保持独立。
@@ -41,3 +42,6 @@
 - 修改命令 AI 的输入归属、推理生命周期或外发上下文时，先读 [`command AI`](../architecture/notes/pebrel_app/ai_commands/2026-11-06-native-command-ai-ownership.md)；原生历史与 AI 并列及接受键归属见 [coexistence](../architecture/notes/pebrel_app/ai_commands/2026-11-08-native-history-coexistence.md)。
 - 共享推理传输的显式/后台准入分预算、跨能力抢占反例与被否定方案见 [`ai_inference`](../architecture/notes/pebrel_app/ai_inference/2026-11-11-explicit-inference-lane-budget.md)；改动 `ai_inference` 的准入、期限或取消语义时一并阅读。
 - OSC 8 本地链接的 C1 损坏恢复、显式链接身份与后台匹配边界见 [`file_uri`](../architecture/notes/pebrel_app/file_uri/2026-11-11-c1-corrupted-osc8-file-links.md)。
+
+- 本机命令输出归档的代次、容量与发布顺序见 [最近输出的持久化边界](../architecture/notes/pebrel_app/recent_output/2026-09-21-bounded-local-output.md)。
+- 登录项的启动意图、首窗静默与显式独立实例的运行时和会话归属见 [`启动边界`](../architecture/notes/pebrel_app/platform/startup/)。

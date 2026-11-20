@@ -91,6 +91,8 @@ enum Mode {
     RejectSftp,
     HangSftp,
     AcceptSftp,
+    BusyFirstSftpChannel,
+    BusyFirstSftpTransport,
 }
 
 struct Loopback {
@@ -99,6 +101,7 @@ struct Loopback {
     forward_requests: Arc<std::sync::atomic::AtomicUsize>,
     forward_handles: mpsc::UnboundedSender<server::Handle>,
     hang: bool,
+    reject_channel: bool,
     data: mpsc::UnboundedSender<Vec<u8>>,
     window_changes: mpsc::UnboundedSender<WindowSize>,
     channels: Vec<Channel<server::Msg>>,
@@ -265,7 +268,7 @@ impl server::Handler for Loopback {
         let _ = self.data.send(b"sftp-request".to_vec());
         match self.mode {
             Mode::HangSftp => Ok(()),
-            Mode::AcceptSftp => {
+            Mode::AcceptSftp | Mode::BusyFirstSftpChannel | Mode::BusyFirstSftpTransport => {
                 session.channel_success(channel)?;
                 let index = self.channels.iter().position(|c| c.id() == channel).unwrap();
                 let stream = self.channels.remove(index).into_stream();
@@ -284,6 +287,11 @@ impl server::Handler for Loopback {
     ) -> Result<(), Self::Error> {
         if self.hang {
             std::future::pending::<()>().await;
+        }
+        if self.reject_channel {
+            self.reject_channel = self.mode == Mode::BusyFirstSftpTransport;
+            reply.reject(russh::ChannelOpenFailure::ConnectFailed).await;
+            return Ok(());
         }
         reply.accept().await;
         if self.mode == Mode::BackpressuredEcho {
@@ -695,6 +703,11 @@ impl Fixture {
                     forward_requests: requests.clone(),
                     forward_handles: forward_handles_tx.clone(),
                     hang: first && mode == Mode::HangFirstConnection,
+                    reject_channel: first
+                        && matches!(
+                            mode,
+                            Mode::BusyFirstSftpChannel | Mode::BusyFirstSftpTransport
+                        ),
                     data: data_tx.clone(),
                     window_changes: window_changes_tx.clone(),
                     channels: Vec::new(),

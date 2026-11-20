@@ -107,6 +107,9 @@ pub(super) fn load_restore(
         .try_global::<WindowRegistry>()
         .is_none_or(|registry| registry.session_persistence.is_isolated());
     load_restore_from(id, startup, restore_directory_size, cx, || {
+        // `isolated` already carries `instance::is_private()` from
+        // `SessionPersistence::default()`, and keeps fixtures able to model an
+        // ordinary window on an elevated host.
         if isolated {
             return None;
         }

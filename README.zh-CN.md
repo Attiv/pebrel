@@ -95,8 +95,8 @@ Pebrel（原名 Nebula）把本地 Shell、远程主机、文件和 AI 命令行
 - 智能补齐与历史补齐、自定义快捷键，以及集成的 Shell 提示符。
 - 在受支持的 Bash/Readline、Zsh/ZLE 和 PowerShell/PSReadLine 提示符中，点击移动光标，
   拖选输入后删除，保留 Shell 原生编辑与撤销；不支持的键位模式和无法确认的布局仍使用终端选区。
-- 显示通过 Kitty 图形协议直接传输的未压缩 RGB/RGBA 图像，同时保留 OSC 1337 支持。
-  存储与传输有界；暂不支持 PNG 载荷、文件或共享内存传输、Unicode 占位符及动画。
+- 显示通过 Kitty 图形协议直接传输的 RGB/RGBA 与 PNG 图像，同时保留 OSC 1337 支持。
+  存储、传输与解码后的 PNG 均有上限；暂不支持文件或共享内存传输、Unicode 占位符及动画。
 - 命令列表支持复选框多选和一次确认批量删除，无需再逐条确认。多选模式下不会执行
   命令，切换搜索或文件夹会清空选择。“选择当前列表”包含当前筛选下滚动区外的命令。
   “管理 → 删除全部命令”不受当前搜索或文件夹限制，会清除全部自定义命令及所有平台
@@ -201,9 +201,10 @@ Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执�
   需要触碰 SSH 密钥时。
 - 已捕获的 Claude Code 与 Codex 回答可在阅读器中打开，支持 Markdown、公式、原文和本地图片预览。
   阅读器控件与提示随所选语言显示；复制原文保留完整回答。详见[阅读器语言说明](docs/answer-reader-language.md)。
-- 剪贴板图片会保存为 PNG，并把路径插入本地、WSL 或 SSH 会话。终端内直接显示图片需要 CLI
-  输出 OSC 1337、Kitty protocol（APC，直接传输 RGB/RGBA 或 PNG）或 Sixel（7 位 DCS）协议；
-  存储、传输与解码后的 PNG 均有上限，附件缩略图取决于 CLI 自身。
+- 剪贴板图片会保存为 PNG，并把路径插入本地、WSL 或 SSH 会话。每个窗格可暂存 128 MiB；
+  接收图片的命令或 Agent 回合结束后，文件至少再保留两分钟，关闭窗格会删除本地临时图片。
+  终端内直接显示图片需要 CLI 输出 OSC 1337、Kitty protocol（APC，直接传输 RGB/RGBA 或 PNG）
+  或 Sixel（7 位 DCS）协议；存储、传输与解码后的 PNG 均有上限，附件缩略图取决于 CLI 自身。
 
 <p align="center">
   <img src="docs/screenshots/ai-sidebar.png" alt="AI 活动侧栏" width="300" />
