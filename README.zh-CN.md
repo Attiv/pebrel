@@ -227,6 +227,8 @@ Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执�
 - Markdown 文档标签与原生数学公式排版，不依赖 WebView。
 - 自定义键位除了具名动作，还可以发送固定文本或精确的控制序列。
 - Pebrel 处于前台时，macOS 的提醒也会进入通知中心，而不只显示应用内提示。
+- 用 `pebrel --new-instance` 启动独立的桌面进程：共用你的设置，且不影响常驻实例和
+  已保存的会话。
 
 <p align="center">
   <img src="docs/screenshots/native-math-rendering.png" alt="原生公式排版" width="1040" />

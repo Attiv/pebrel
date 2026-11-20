@@ -277,6 +277,8 @@ discover candidates from the current environment without matching prior commands
   named action only.
 - Notices raised while Pebrel is in the foreground also reach Notification Center on
   macOS, instead of only the in-app toast.
+- Start a separate desktop process with `pebrel --new-instance`. It shares your
+  settings and leaves the resident instance and the saved session untouched.
 
 <p align="center">
   <img src="docs/screenshots/native-math-rendering.png" alt="Native formula rendering" width="1040" />

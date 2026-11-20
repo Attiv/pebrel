@@ -4,6 +4,80 @@ Every release entry is provided in English and Simplified Chinese.
 
 每个版本条目均同时提供英文和简体中文说明。
 
+## 2.6.1 - 2026-11-20
+
+### English
+
+This fork release aligns its package version with upstream Pebrel 2.6.1 and integrates the latest upstream main branch. The changes below cover window and tab identity, agent session recovery, SSH channel reuse and clipboard image lifetimes. Fork features are preserved: AI command completion remains off by default, explicit AI commands keep priority over background predictions, tab titles can keep the local directory or SSH host, and automatic command output views can be turned off.
+
+This customized fork release provides Windows x64/ARM64 installers and portable ZIPs plus a macOS Apple Silicon DMG. macOS retains its Preview label and ad-hoc signing; these packages are not notarized. macOS Intel, Linux, Android and relay packages are outside this release's scope.
+
+#### Added
+
+- Added `pebrel --new-instance` to start a separate desktop process with a fresh, unsaved workspace. It shares your settings and leaves both the resident instance and the saved session untouched.
+
+#### Fixed
+
+- Fixed closing a busy tab or split acting on a different target when its position changed while the confirmation was open, including a pending focus change taking focus from the dialog.
+- Fixed Codex tabs reopening an older conversation. Pebrel now follows the conversation you switch to inside a pane, and recognizes the Codex navigation footer on Windows.
+- Fixed reopening to an idle shell when automatic Codex recovery is enabled and a saved tab has no thread ID; the tab now opens the Codex conversation picker.
+- Fixed local OMP conversations losing their session on restart, including redraws inside the prompt zone and PowerShell 7 sessions on Windows.
+- Fixed an SSH tab failing to notice that its prompt returned after the remote clock advanced.
+- Fixed SSH agent hooks dropping a complete answer that fits the message limit when unrelated tool output makes the event too large.
+- Fixed file browsing and clipboard uploads in SSH tabs whose reused connection had lost its channel setup.
+- Fixed delegated AI completions being delivered to another pane, losing the native answer, or submitting deferred input without the terminal's negotiated keyboard mode.
+- Fixed Windows installer upgrades and uninstalls removing WSL context menu entries you had edited.
+- Fixed opening a directory in an existing elevated Windows window ignoring the configured default shell profile.
+- Fixed Windows ignoring file-configured shortcut aliases such as `esc` by registering them under their native key names.
+- Fixed diagnostics and settings read errors writing new command history records to disk while `command_history_persist=0` keeps them in memory.
+
+#### Improved
+
+- Improved clipboard image retention: the 128 MiB limit per pane is derived from retained attachments instead of a paste count. Files stay at least two minutes after the receiving command or agent turn finishes, and closing a pane removes its local temporary images.
+
+### 中文
+
+本定制分支把包版本对齐到上游 Pebrel 2.6.1，并整合了上游 main 分支的最新代码。下面的改动覆盖窗口与标签身份、Agent 会话恢复、SSH 通道复用以及剪贴板图片生命周期。fork 自有功能全部保留：AI 命令补全仍默认关闭，显式 AI 命令优先于后台预测，标签标题可保留本地目录名或 SSH 主机名，命令输出自动视图可以关闭。
+
+本定制分支提供 Windows x64/ARM64 安装器与便携 ZIP，以及 macOS Apple Silicon DMG。macOS 保留 Preview 标识和 ad-hoc 签名，未进行公证。本次不发布 macOS Intel、Linux、Android 或 relay 包。
+
+#### 新增
+
+- 新增 `pebrel --new-instance`，可启动一个独立的桌面进程并使用全新、不保存的工作区。它共用你的设置，同时不影响常驻实例和已保存的会话。
+
+#### 修复
+
+- 修复关闭繁忙标签或分屏时，确认框打开期间位置变化会导致关错目标的问题；挂起的聚焦切换也不会再抢走对话框焦点。
+- 修复 Codex 标签重启后回到旧对话的问题。Pebrel 现在会跟随你在窗格内切换到的对话，Windows 上同样能识别 Codex 的导航提示区。
+- 修复开启 Codex 自动恢复、但标签缺少对话 ID 时，重开 Pebrel 只看到空闲 Shell 的问题；现在会在原标签打开 Codex 对话选择器。
+- 修复本地 OMP 对话在重启后丢失会话的问题，包含提示符区域重绘以及 Windows 上 PowerShell 7 的会话。
+- 修复 SSH 标签在远端时钟推进后，无法识别提示符已返回的问题。
+- 修复 SSH 上的 Agent 因无关工具输出使事件过大、而丢掉仍在消息上限内的完整答复的问题。
+- 修复复用的 SSH 连接丢失通道初始化后，文件浏览与剪贴板图片上传无法继续的问题。
+- 修复窗格委派的 AI 补全送到其他窗格、丢失原生答复，以及提交延迟输入时未使用终端协商的键盘模式的问题。
+- 修复 Windows 安装器升级或卸载时，误删用户改过的 WSL 右键菜单项的问题。
+- 修复在已打开的 Windows 管理员窗口中打开目录时，忽略配置的默认 Shell 的问题。
+- 修复 Windows 未按原生键名注册文件里配置的快捷键别名（例如 `esc`），导致别名不生效的问题。
+- 修复在 `command_history_persist=0` 只保留内存记录时，诊断输出与设置读取失败仍把新记录写入磁盘的问题。
+
+#### 改进
+
+- 改进剪贴板图片保留策略：每个窗格 128 MiB 的上限改为按保留的附件计算，不再按粘贴次数。接收图片的命令或 Agent 回合结束后，文件至少再保留两分钟；关闭窗格会删除本地临时图片。
+
+### Contributors
+
+Release preparation by [Attiv](https://github.com/Attiv).
+
+发布准备：[Attiv](https://github.com/Attiv)。
+
+### SHA256
+
+- `Pebrel-v2.6.1-macos-arm64-preview.dmg`: `PENDING FINAL BUILD`
+- `Pebrel-v2.6.1-windows-x64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.6.1-windows-x64-setup.exe`: `PENDING FINAL BUILD`
+- `Pebrel-v2.6.1-windows-arm64.zip`: `PENDING FINAL BUILD`
+- `Pebrel-v2.6.1-windows-arm64-setup.exe`: `PENDING FINAL BUILD`
+
 ## 2.6.0 - 2026-11-20
 
 ### English
