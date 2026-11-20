@@ -1740,3 +1740,7 @@ mod kitty_tests;
 #[cfg(test)]
 #[path = "event_loop/zmodem_tests.rs"]
 mod zmodem_tests;
+
+#[cfg(test)]
+#[path = "event_loop/graphics_matrix.rs"]
+mod graphics_matrix;

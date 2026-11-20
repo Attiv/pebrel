@@ -275,11 +275,13 @@ pub fn run_shell(
     });
     crate::tray::shutdown();
     crate::ai_hook::shutdown();
+    crate::directory_history::shutdown();
 }
 
 /// 组件库/主题/快捷键/用户配置的一次性初始化。
 fn init(cx: &mut App, startup_window: config::StartupWindow) {
     motion::init(cx);
+    crate::platform::notifications::init_gpui(cx);
     crate::platform::acrylic::init(cx);
     // 图标字库独立注册，系统正文无需为提示符和界面图标加载完整 Maple。
     register_bundled_fonts(cx);
