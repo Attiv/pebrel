@@ -6342,7 +6342,7 @@ dependencies = [
 
 [[package]]
 name = "pebrel"
-version = "2.5.9"
+version = "2.6.0"
 dependencies = [
  "ab_glyph_rasterizer",
  "aes-gcm",
@@ -6443,7 +6443,7 @@ dependencies = [
 
 [[package]]
 name = "pebrel-completions"
-version = "2.5.9"
+version = "2.6.0"
 dependencies = [
  "lscolors",
  "nu-ansi-term",
@@ -6499,15 +6499,15 @@ dependencies = [
 
 [[package]]
 name = "pebrel-settings"
-version = "2.5.9"
+version = "2.6.0"
 
 [[package]]
 name = "pebrel-split"
-version = "2.5.9"
+version = "2.6.0"
 
 [[package]]
 name = "pebrel_config"
-version = "2.5.9"
+version = "2.6.0"
 dependencies = [
  "log",
  "pebrel_config_derive",
@@ -6517,7 +6517,7 @@ dependencies = [
 
 [[package]]
 name = "pebrel_config_derive"
-version = "2.5.9"
+version = "2.6.0"
 dependencies = [
  "log",
  "pebrel_config",
@@ -6534,7 +6534,7 @@ version = "0.6.0"
 
 [[package]]
 name = "pebrel_terminal"
-version = "2.5.9"
+version = "2.6.0"
 dependencies = [
  "base64 0.22.1",
  "bitflags 2.13.0",

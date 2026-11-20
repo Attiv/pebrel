@@ -1,6 +1,6 @@
 [package]
 name = "pebrel_config"
-version = "2.5.9"
+version = "2.6.0"
 license = "GPL-3.0-or-later"
 description = "Nebula configuration abstractions"
 homepage = "https://github.com/Kuddev/pebrel"
@@ -14,5 +14,5 @@ serde = "1.0.163"
 toml.workspace = true
 
 [dev-dependencies]
-pebrel_config_derive = { version = "2.5.9", path = "../pebrel_config_derive" }
+pebrel_config_derive = { version = "2.6.0", path = "../pebrel_config_derive" }
 serde = { version = "1.0.163", features = ["derive"] }

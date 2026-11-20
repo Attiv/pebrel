@@ -101,9 +101,9 @@ each agent's activity, and read its output without leaving the application.
 - Click to move the cursor and drag to select input for deletion in supported
   Bash/Readline, Zsh/ZLE and PowerShell/PSReadLine prompts. Native shell editing and
   undo are preserved; unsupported keymaps and uncertain layouts keep terminal selection.
-- Display directly transmitted, uncompressed RGB/RGBA images using the Kitty graphics protocol,
-  alongside existing OSC 1337 images. Storage and transfers are bounded; PNG payloads,
-  file/shared-memory transport, Unicode placeholders and animation are not supported.
+- Display directly transmitted RGB/RGBA and PNG images using the Kitty graphics protocol,
+  alongside existing OSC 1337 images. Storage, transfers and decoded PNG payloads are
+  bounded; file/shared-memory transport, Unicode placeholders and animation are not supported.
 - Saved-command management supports checkbox selection and one confirmation for a
   batch, replacing repeated single-command deletion. Selection mode never runs a
   command; changing the search or folder clears the selection. **Select results**
@@ -127,6 +127,14 @@ each agent's activity, and read its output without leaving the application.
   PSReadLine normalizes CRLF and expands tabs to four spaces; other editors retain
   their negotiated paste or existing confirmation behavior. See the
   [clipboard paste contract](architecture/notes/pebrel_app/gpui_shell/terminal/view/2026-10-23-powershell-clipboard-paste.md).
+- Start a program in a new tab of a resident window from the command line: `pebrel tab new`
+  and the `ctl new-tab` control command accept a program with literal arguments, so a
+  script does not have to type into a shell first.
+- Niu (niubash's `niu.exe`) profiles imported from the terminal directory appear in the
+  default shell picker and launch with `--login -i`.
+- Commands typed with a leading space stay out of Pebrel's command history. History
+  records can stay in memory (`command_history_persist=0`), and instances that save at
+  the same time no longer lose each other's records.
 
 ### Intelligent Completion
 
@@ -204,6 +212,8 @@ discover candidates from the current environment without matching prior commands
   are limited to 64 MiB and decoded frames to 128 MiB.
 - Local file browsing and Git actions alongside your terminals.
 - Duplicated WSL and SSH tabs retain their known working directory.
+- Local OSC 8 file links keep working when their identifier is corrupted by a UTF-8
+  `0x9C` collision, and retain their explicit identity across hard wraps.
 
 <p align="center">
   <img src="docs/screenshots/ssh.gif" alt="Native SSH session" width="1040" />
@@ -224,6 +234,10 @@ discover candidates from the current environment without matching prior commands
   through Pebrel. Suggestions are off by default and can use a separate provider/model
   without changing the agent's main model; their adapters are bundled.
 - Notifications follow their source pane; clicking one returns you to that terminal.
+- Command Code is recognized alongside the other agent CLIs, including resume and fork.
+- Agents can raise a notification themselves through `pane.notify`: the configured bell
+  plays and the message reaches the notification center, for example when an SSH key
+  needs a touch.
 - Captured Claude Code and Codex answers open in a reader with Markdown, formulas,
   source text, and local image previews. Reader controls and notices follow the
   selected language; Copy source preserves the complete original answer. See
@@ -257,6 +271,10 @@ discover candidates from the current environment without matching prior commands
   animation speed, frame rate and numeric parameters. Effects must be enabled;
   terminal shaders run in their listed order.
 - Markdown document tabs and native mathematical typesetting without a WebView.
+- Custom key bindings can send fixed text or an exact control sequence instead of a
+  named action only.
+- Notices raised while Pebrel is in the foreground also reach Notification Center on
+  macOS, instead of only the in-app toast.
 
 <p align="center">
   <img src="docs/screenshots/native-math-rendering.png" alt="Native formula rendering" width="1040" />

@@ -112,6 +112,12 @@ Pebrel（原名 Nebula）把本地 Shell、远程主机、文件和 AI 命令行
   按 Enter 才提交，一次撤销可移除整次粘贴。需要 Shell 集成生效且托管粘贴键没有被用户占用。
   PSReadLine 会统一 CRLF 换行并将 Tab 展开为四个空格；其他编辑器沿用已协商的粘贴协议
   或现有确认行为。详见[剪贴板粘贴边界](architecture/notes/pebrel_app/gpui_shell/terminal/view/2026-10-23-powershell-clipboard-paste.md)。
+- 可在常驻窗口的新标签页里直接启动程序：`pebrel tab new` 与 `ctl new-tab` 控制命令支持
+  程序及其字面参数，脚本无需先向 Shell 输入文本。
+- 从终端目录导入的 Niu（niubash 的 `niu.exe`）配置会出现在默认 Shell 下拉中，并以
+  `--login -i` 启动。
+- 以空格开头的命令不会进入 Pebrel 命令历史；历史记录可以只保留在内存
+  （`command_history_persist=0`）；多个实例同时保存也不再互相丢记录。
 
 ### 智能补齐
 
@@ -172,6 +178,8 @@ Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执�
   图片源文件上限为 64 MiB，解码帧上限为 128 MiB。
 - 在终端旁浏览本地文件并执行 Git 操作。
 - 复制 WSL 与 SSH 标签时保留已知工作目录。
+- 本地 OSC 8 文件链接的标识符被 UTF-8 `0x9C` 碰撞破坏后仍可使用，并在硬换行后保留
+  显式的链接身份。
 
 <p align="center">
   <img src="docs/screenshots/ssh.gif" alt="原生 SSH 会话" width="1040" />
@@ -188,11 +196,14 @@ Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执�
   基于近期对话提供下一条消息建议。预测默认关闭，可单独使用服务商/模型，不改变 Agent 主模型，
   适配器随应用提供。
 - 通知跟随来源窗格，点击即可返回对应终端。
+- 新增对 Command Code 的识别，与其他 Agent CLI 并列，支持恢复与分叉。
+- Agent 可通过 `pane.notify` 主动提醒：触发已配置的响铃，并把消息送到通知中心，例如
+  需要触碰 SSH 密钥时。
 - 已捕获的 Claude Code 与 Codex 回答可在阅读器中打开，支持 Markdown、公式、原文和本地图片预览。
   阅读器控件与提示随所选语言显示；复制原文保留完整回答。详见[阅读器语言说明](docs/answer-reader-language.md)。
 - 剪贴板图片会保存为 PNG，并把路径插入本地、WSL 或 SSH 会话。终端内直接显示图片需要 CLI
-  输出 OSC 1337、Kitty protocol（APC，直接传输 RGB/RGBA）或 Sixel（7 位 DCS）协议；
-  附件缩略图取决于 CLI 自身。
+  输出 OSC 1337、Kitty protocol（APC，直接传输 RGB/RGBA 或 PNG）或 Sixel（7 位 DCS）协议；
+  存储、传输与解码后的 PNG 均有上限，附件缩略图取决于 CLI 自身。
 
 <p align="center">
   <img src="docs/screenshots/ai-sidebar.png" alt="AI 活动侧栏" width="300" />
@@ -213,6 +224,8 @@ Tab 打开列表，再次按 Tab 轮换候选，Enter 插入选中项但不执�
 - 使用 GLSL（`.glsl`/`.frag`）或 WGSL 背景/终端效果，并配置动画速度、帧率与数值参数。
   效果需要显式启用，终端 shader 按列表顺序运行。
 - Markdown 文档标签与原生数学公式排版，不依赖 WebView。
+- 自定义键位除了具名动作，还可以发送固定文本或精确的控制序列。
+- Pebrel 处于前台时，macOS 的提醒也会进入通知中心，而不只显示应用内提示。
 
 <p align="center">
   <img src="docs/screenshots/native-math-rendering.png" alt="原生公式排版" width="1040" />
